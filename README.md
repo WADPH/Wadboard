@@ -1,4 +1,4 @@
-# Wadboard — Your own simple dsahboard 
+# Wadboard — Your own simple dashboard 
 
 <img width="1084" height="989" alt="image" src="https://github.com/user-attachments/assets/cff53d89-af31-4b11-a705-76aa5bfa00bb" />
 
