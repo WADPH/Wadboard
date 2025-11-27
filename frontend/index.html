@@ -3,317 +3,412 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Wadboard</title>
-  <link rel="icon" type="image/png" href="https://cdn-icons-png.freepik.com/512/6826/6826146.png">
+  <title>WADPH Dashboard</title>
+  <link rel="icon" type="image/png" href="images/wadboard_logo.png">
 
   <style>
-    :root {
-      --radius-xl: 1rem;
-      --radius-2xl: 1.5rem;
-      --shadow-card: 0 32px 64px rgba(0,0,0,0.45);
+  :root {
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
+    --shadow-card: 0 32px 64px rgba(0,0,0,0.45);
 
-      --green-bg: rgba(16,185,129,0.18);
-      --green-text: #10b981;
-      --green-border: rgba(16,185,129,0.4);
+    --green-bg: rgba(16,185,129,0.18);
+    --green-text: #10b981;
+    --green-border: rgba(16,185,129,0.4);
 
-      --red-bg: rgba(239,68,68,0.18);
-      --red-text: #ef4444;
-      --red-border: rgba(239,68,68,0.4);
+    --red-bg: rgba(239,68,68,0.18);
+    --red-text: #ef4444;
+    --red-border: rgba(239,68,68,0.4);
 
-      --drag-ring: #7c3aed;
-      --drag-bg: rgba(124,58,237,0.1);
+    --drag-ring: #7c3aed;
+    --drag-bg: rgba(124,58,237,0.1);
 
-      --transition-fast: 0.15s ease;
-    }
+    --transition-fast: 0.15s ease;
+  }
 
-    :root[data-theme="dark"] {
-      --bg: #0e0f14;
-      --surface: #171923;
-      --surface-alt: #1f2333;
-      --border: #2b3050;
+  :root[data-theme="dark"] {
+    --bg: #0e0f14;
+    --surface: #171923;
+    --surface-alt: #1f2333;
+    --border: #2b3050;
 
-      --text-main: #ecf0ff;
-      --text-dim: #7b82b4;
-      --text-mid: #aeb6ff;
+    --text-main: #ecf0ff;
+    --text-dim: #7b82b4;
+    --text-mid: #aeb6ff;
 
-      --btn-bg: #4247a3;
-      --btn-bg-hover: #5257c7;
-      --danger-bg: #dc2626;
-      --danger-bg-hover: #ef4444;
+    --btn-bg: #4247a3;
+    --btn-bg-hover: #5257c7;
+    --danger-bg: #dc2626;
+    --danger-bg-hover: #ef4444;
 
-      --accent-bg: linear-gradient(135deg,#7c3aed 0%,#06b6d4 100%);
-      --accent-text: #ffffff;
-      --chip-shadow: 0 6px 20px rgba(124,58,237,0.25);
-    }
+    --accent-bg: linear-gradient(135deg,#7c3aed 0%,#06b6d4 100%);
+    --accent-text: #ffffff;
+    --chip-shadow: 0 6px 20px rgba(124,58,237,0.25);
+  }
 
-    :root[data-theme="light"] {
-      --bg: #f6f7ff;
-      --surface: #ffffff;
-      --surface-alt: #eef1ff;
-      --border: #d7dbff;
+  :root[data-theme="light"] {
+    --bg: #f6f7ff;
+    --surface: #ffffff;
+    --surface-alt: #eef1ff;
+    --border: #d7dbff;
 
-      --text-main: #12122b;
-      --text-dim: #676c93;
-      --text-mid: #333a83;
+    --text-main: #12122b;
+    --text-dim: #676c93;
+    --text-mid: #333a83;
 
-      --btn-bg: #333a83;
-      --btn-bg-hover: #3f49ad;
-      --danger-bg: #dc2626;
-      --danger-bg-hover: #ef4444;
+    --btn-bg: #333a83;
+    --btn-bg-hover: #3f49ad;
+    --danger-bg: #dc2626;
+    --danger-bg-hover: #ef4444;
 
-      --accent-bg: linear-gradient(135deg,#4f46e5 0%,#0ea5e9 100%);
-      --accent-text: #ffffff;
-      --chip-shadow: 0 6px 20px rgba(79,70,229,0.25);
-    }
+    --accent-bg: linear-gradient(135deg,#4f46e5 0%,#0ea5e9 100%);
+    --accent-text: #ffffff;
+    --chip-shadow: 0 6px 20px rgba(79,70,229,0.25);
+  }
 
-    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text-main);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      transition: background var(--transition-fast), color var(--transition-fast);
-    }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-main);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
 
-    .page { min-height: 100vh; display: flex; flex-direction: column; }
-    .wrap {
-      width: min(1400px, 96vw);
-      margin: 0 auto;
-      padding: 2rem 0 3rem;
-      flex: 1 0 auto;
-    }
+  .page { min-height: 100vh; display: flex; flex-direction: column; }
+  .wrap {
+    width: min(1400px, 96vw);
+    margin: 0 auto;
+    padding: 2rem 0 3rem;
+    flex: 1 0 auto;
+  }
 
-    .header {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 1rem;
-      align-items: flex-start;
-    }
+  .header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+  }
 
-    .brand-row { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+  .brand-row { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
 
-    .brand-mark {
-      background-image: var(--accent-bg);
-      color: var(--accent-text);
-      font-weight: 700;
-      font-size: .8rem;
-      line-height: 1.2;
-      border-radius: var(--radius-xl);
-      padding: .5rem .75rem;
-      box-shadow: 0 18px 36px rgba(0,0,0,0.35);
-    }
+  .brand-mark {
+    background-image: var(--accent-bg);
+    color: var(--accent-text);
+    font-weight: 700;
+    font-size: .8rem;
+    line-height: 1.2;
+    border-radius: var(--radius-xl);
+    padding: .5rem .75rem;
+    box-shadow: 0 18px 36px rgba(0,0,0,0.35);
+  }
 
-    .title h1 {
-      margin: 0;
-      font-size: 1.55rem;
-      letter-spacing: -0.02em;
-    }
+  .title h1 {
+    margin: 0;
+    font-size: 1.55rem;
+    letter-spacing: -0.02em;
+  }
 
-    .title p {
-      margin: .25rem 0 0;
-      font-size: .8rem;
-      color: var(--text-dim);
-    }
+  .title p {
+    margin: .25rem 0 0;
+    font-size: .8rem;
+    color: var(--text-dim);
+  }
 
-    .badge {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      padding: .6rem .8rem;
-      font-size: .7rem;
-      color: var(--text-dim);
-      box-shadow: var(--shadow-card);
-    }
-    .badge b { color: var(--text-mid); }
+  .badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: .6rem .8rem;
+    font-size: .7rem;
+    color: var(--text-dim);
+    box-shadow: var(--shadow-card);
+  }
+  .badge b { color: var(--text-mid); }
 
-    .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; }
-    .icon-btn {
-      cursor: pointer;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-main);
-      border-radius: var(--radius-xl);
-      padding: .6rem .9rem;
-      font-weight: 700;
-      font-size: .75rem;
-      box-shadow: var(--shadow-card);
-      transition: border-color var(--transition-fast), background var(--transition-fast);
-    }
-    .icon-btn:hover { border-color: var(--drag-ring); }
+  .toolbar { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .icon-btn {
+    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: var(--radius-xl);
+    padding: .6rem .9rem;
+    font-weight: 700;
+    font-size: .75rem;
+    box-shadow: var(--shadow-card);
+    transition: border-color var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+  }
+  .icon-btn:hover { border-color: var(--drag-ring); }
+  .icon-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
 
-    .section { margin-top: 2rem; }
-    .section-head {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: .9rem;
-    }
-    .section-head h2 { margin: 0; font-size: 1.1rem; }
-    .section-count { font-size: .7rem; color: var(--text-dim); }
+  .section { margin-top: 2rem; }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: .9rem;
+  }
+  .section-head h2 { margin: 0; font-size: 1.1rem; }
+  .section-count { font-size: .7rem; color: var(--text-dim); }
 
+  .grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  @media(min-width: 780px){
     .grid {
-      display: grid;
-      gap: 1rem;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2,1fr);
     }
-    @media(min-width: 780px){
-      .grid {
-        grid-template-columns: repeat(2,1fr);
-      }
+  }
+  @media(min-width: 780px){
+    .full-span {
+      grid-column: span 2;
     }
-    @media(min-width: 780px){
-      .full-span {
-        grid-column: span 2;
-      }
-    }
+  }
 
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-2xl);
-      padding: 1rem;
-      box-shadow: var(--shadow-card);
-      display: flex; flex-direction: column; gap: .9rem;
-      transition: background var(--transition-fast), border-color var(--transition-fast);
-      min-width: 0;
-    }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    padding: 1rem;
+    box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: .9rem;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    min-width: 0;
+  }
 
-    .card[draggable="true"] { cursor: grab; }
-    .card.drag-over { border-color: var(--drag-ring); background: var(--drag-bg); }
+  .card[draggable="true"] { cursor: grab; }
+  .card.drag-over { border-color: var(--drag-ring); background: var(--drag-bg); }
 
-    .svc-top { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
-    .svc-name { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-weight: 700; }
+  .svc-top { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
+  .svc-name { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-weight: 700; }
 
-    .chip-up, .chip-down {
-      display: inline-flex; align-items: center;
-      font-size: .65rem; font-weight: 800; padding: .25rem .5rem;
-      border-radius: 999px; border: 1px solid transparent; box-shadow: var(--chip-shadow);
-    }
-    .chip-up {
-      background: var(--green-bg); color: var(--green-text); border-color: var(--green-border);
-    }
-    .chip-down {
-      background: var(--red-bg); color: var(--red-text); border-color: var(--red-border);
-    }
+  .chip-up, .chip-down {
+    display: inline-flex; align-items: center;
+    font-size: .65rem; font-weight: 800; padding: .25rem .5rem;
+    border-radius: 999px; border: 1px solid transparent; box-shadow: var(--chip-shadow);
+  }
+  .chip-up {
+    background: var(--green-bg); color: var(--green-text); border-color: var(--green-border);
+  }
+  .chip-down {
+    background: var(--red-bg); color: var(--red-text); border-color: var(--red-border);
+  }
 
-    .svc-url { color: var(--text-dim); font-size: .78rem; word-break: break-all; }
-    .svc-notes {
-      color: var(--text-mid);
-      font-size: .78rem;
-      word-break: break-word;
-      white-space: pre-line;
-    }
+  .svc-url { color: var(--text-dim); font-size: .78rem; word-break: break-all; }
+  .svc-notes {
+    color: var(--text-mid);
+    font-size: .78rem;
+    word-break: break-word;
+    white-space: pre-line;
+  }
 
-    .btn-row { display: flex; gap: .5rem; flex-wrap: wrap; }
-    .btn {
-      cursor: pointer; background: var(--btn-bg); color: #fff; border: 0;
-      border-radius: var(--radius-xl); padding: .48rem .75rem; font-weight: 700; font-size: .72rem;
-      transition: background var(--transition-fast);
-      text-decoration: none; display: inline-flex; align-items: center; gap: .35rem;
-    }
-    .btn:hover { background: var(--btn-bg-hover); }
-    .btn-danger { background: var(--danger-bg); }
-    .btn-danger:hover { background: var(--danger-bg-hover); }
+  .btn-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .btn {
+    cursor: pointer; background: var(--btn-bg); color: #fff; border: 0;
+    border-radius: var(--radius-xl); padding: .48rem .75rem; font-weight: 700; font-size: .72rem;
+    transition: background var(--transition-fast);
+    text-decoration: none; display: inline-flex; align-items: center; gap: .35rem;
+  }
+  .btn:hover { background: var(--btn-bg-hover); }
+  .btn-danger { background: var(--danger-bg); }
+  .btn-danger:hover { background: var(--danger-bg-hover); }
 
-    .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: .9rem; flex-wrap: wrap; }
-    .meta .group { font-size: .78rem; color: var(--text-dim); }
-    .meta .group b { color: var(--text-mid); display: block; margin-bottom: .2rem; }
+  .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: .9rem; flex-wrap: wrap; }
+  .meta .group { font-size: .78rem; color: var(--text-dim); }
+  .meta .group b { color: var(--text-mid); display: block; margin-bottom: .2rem; }
 
-    .link-row { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
-    .link-left { display: flex; gap: .75rem; align-items: flex-start; min-width: 0; }
-    .link-icon { font-size: 1.55rem; line-height: 1; }
-    .link-title { font-weight: 800; margin: 0 0 .25rem; }
-    .link-url { font-size: .78rem; color: var(--text-dim); word-break: break-all; }
-    .link-notes {
-      font-size: .78rem;
-      color: var(--text-mid);
-      word-break: break-word;
-      white-space: pre-line;
-    }
+  .link-row { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
+  .link-left { display: flex; gap: .75rem; align-items: flex-start; min-width: 0; }
+  .link-icon { font-size: 1.55rem; line-height: 1; }
+  .link-title { font-weight: 800; margin: 0 0 .25rem; }
+  .link-url { font-size: .78rem; color: var(--text-dim); word-break: break-all; }
+  .link-notes {
+    font-size: .78rem;
+    color: var(--text-mid);
+    word-break: break-word;
+    white-space: pre-line;
+  }
 
-    .wol-row { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
-    .wol-left { display: flex; flex-direction: column; gap: .4rem; min-width:0; }
-    .wol-title { font-weight: 800; margin: 0; }
-    .wol-notes {
-      font-size: .78rem;
-      color: var(--text-mid);
-      word-break: break-word;
-      white-space: pre-line;
-    }
-    .wol-meta {
-      font-size: .72rem;
-      color: var(--text-dim);
-      word-break: break-word;
-      white-space: pre-line;
-    }
-    .wol-chip {
-      display:inline-block;
-      font-size:.65rem;
-      font-weight:700;
-      padding:.25rem .5rem;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:var(--surface-alt);
-      color:var(--text-mid);
-    }
+  .wol-row { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; }
+  .wol-left { display: flex; flex-direction: column; gap: .4rem; min-width:0; }
+  .wol-title { font-weight: 800; margin: 0; }
+  .wol-notes {
+    font-size: .78rem;
+    color: var(--text-mid);
+    word-break: break-word;
+    white-space: pre-line;
+  }
+  .wol-meta {
+    font-size: .72rem;
+    color: var(--text-dim);
+    word-break: break-word;
+    white-space: pre-line;
+  }
+  .wol-chip {
+    display:inline-block;
+    font-size:.65rem;
+    font-weight:700;
+    padding:.25rem .5rem;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:var(--surface-alt);
+    color:var(--text-mid);
+  }
 
-    .hidden { display: none !important; }
+  .hidden { display: none !important; }
 
-    .overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-      display: flex; align-items: center; justify-content: center; z-index: 9999;
-    }
-    .modal {
-      width: min(92vw, 520px);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-2xl);
-      box-shadow: var(--shadow-card);
-      padding: 1rem 1.25rem 1.25rem;
-      display: flex; flex-direction: column; gap: 1rem;
-    }
-    .modal-top { display: flex; justify-content: space-between; gap: .75rem; align-items: center; }
-    .tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
-    .tab {
-      cursor: pointer; background-image: var(--accent-bg); color: var(--accent-text);
-      border: 0; border-radius: var(--radius-xl); padding: .5rem .75rem; font-weight: 800; font-size: .72rem;
-      box-shadow: 0 16px 32px rgba(0,0,0,0.3);
-    }
-    .close {
-      cursor: pointer; background: var(--surface-alt); border: 1px solid var(--border);
-      border-radius: var(--radius-xl); padding: .5rem .75rem; font-weight: 800; font-size: .72rem;
-    }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .modal {
+    width: min(92vw, 520px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-card);
+    padding: 1rem 1.25rem 1.25rem;
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+  .modal-top { display: flex; justify-content: space-between; gap: .75rem; align-items: center; }
+  .tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .tab {
+    cursor: pointer; background-image: var(--accent-bg); color: var(--accent-text);
+    border: 0; border-radius: var(--radius-xl); padding: .5rem .75rem; font-weight: 800; font-size: .72rem;
+    box-shadow: 0 16px 32px rgba(0,0,0,0.3);
+  }
+  .close {
+    cursor: pointer; background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: .5rem .75rem; font-weight: 800; font-size: .72rem;
+  }
 
-    .form {
-      background: var(--surface-alt); border: 1px solid var(--border);
-      border-radius: var(--radius-xl); padding: 1rem;
-    }
-    .form h3 { margin: 0 0 .75rem; }
-    .field { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
-    .label { font-size: .75rem; color: var(--text-mid); font-weight: 700; }
-    .input, .textarea, select.input {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text-main);
-      border-radius: var(--radius-xl); padding: .6rem .75rem; font-size: .85rem; outline: none;
-      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-    }
-    .textarea { min-height: 84px; resize: vertical; }
-    .input:focus, .textarea:focus, select.input:focus {
-      border-color: var(--drag-ring); box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
-    }
-    .submit { width: 100%; }
+  .form {
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: 1rem;
+  }
+  .form h3 { margin: 0 0 .75rem; }
+  .field { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
+  .label { font-size: .75rem; color: var(--text-mid); font-weight: 700; }
+  .input, .textarea, select.input {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-main);
+    border-radius: var(--radius-xl); padding: .6rem .75rem; font-size: .85rem; outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .textarea { min-height: 84px; resize: vertical; }
+  .input:focus, .textarea:focus, select.input:focus {
+    border-color: var(--drag-ring); box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
+  }
+  .submit { width: 100%; }
 
-    .footer {
-      width: 100%;
-      margin-top: auto;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      color: var(--text-dim);
-    }
-    .footer .inner {
-      width: min(1400px, 96vw);
-      margin: 0 auto; padding: .9rem 0;
-      font-size: .72rem; text-align: center;
-    }
+  .footer {
+    width: 100%;
+    margin-top: auto;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .footer .inner {
+    width: min(1400px, 96vw);
+    margin: 0 auto; padding: .9rem 0;
+    font-size: .72rem; text-align: center;
+  }
+
+  /* Host banner styles */
+  .host-banner {
+    max-width: 720px;
+    margin: 1.5rem auto 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    padding: 1.1rem 1.5rem;
+    box-shadow: var(--shadow-card);
+    text-align: center;
+  }
+
+  .host-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .host-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+  }
+
+  .host-sub {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+  }
+
+  .host-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+  }
+
+  .host-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    font-size: 0.78rem;
+    color: var(--text-mid);
+    box-shadow: var(--chip-shadow);
+    white-space: nowrap;
+  }
+
+  .host-chip b {
+    color: var(--text-main);
+    font-weight: 800;
+  }
+
+  .host-actions {
+    margin-top: 0.4rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+  }
+
+  .host-actions-note {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  /* SSH actions editor */
+  .ssh-section {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .ssh-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: .25rem;
+  }
+  .ssh-row .ssh-input {
+    flex: 1 1 160px;
+  }
+  .ssh-row .btn {
+    flex: 0 0 auto;
+  }
   </style>
 </head>
 <body>
@@ -321,9 +416,9 @@
   <div class="wrap">
     <header class="header">
       <div class="brand-row">
-        <div class="brand-mark">WAD</div>
+        <div class="brand-mark">WADPH</div>
         <div class="title">
-          <h1>Dashboard</h1>
+          <h1>Wadboard</h1>
           <p>Internal Services And Status</p>
         </div>
       </div>
@@ -332,11 +427,28 @@
         <div class="badge"><b>Auto-refresh</b> Every 10s</div>
         <div class="toolbar">
           <button class="icon-btn" id="theme-toggle">Theme</button>
+          <button class="icon-btn" id="refresh-btn">Refresh</button>
           <button class="icon-btn" id="admin-toggle">Settings</button>
           <button class="icon-btn hidden" id="open-modal">Add</button>
         </div>
       </div>
     </header>
+
+    <!-- Host status banner -->
+    <section class="section">
+      <div id="host-banner" class="host-banner">
+        <div class="host-left">
+          <div class="host-title">Device Maintenance</div>
+          <div class="host-sub" id="host-updated">—</div>
+        </div>
+        <div class="host-stats" id="host-stats">
+          <!-- filled by JS -->
+        </div>
+        <div class="host-actions" id="host-actions">
+          <!-- maintenance buttons -->
+        </div>
+      </div>
+    </section>
 
     <section class="section">
       <div class="section-head">
@@ -365,7 +477,7 @@
   </div>
 
   <footer class="footer">
-    <div class="inner">— WAD —<br>Dashboard</div>
+    <div class="inner">—— Wadboard ——<br>— Control Everything —</div>
   </footer>
 </div>
 
@@ -377,6 +489,7 @@
         <button class="tab" id="tab-service">Service</button>
         <button class="tab" id="tab-link">Link</button>
         <button class="tab" id="tab-wol">WOL</button>
+        <button class="tab" id="tab-host">Device Cmd</button>
       </div>
       <button class="close" id="modal-close">Close</button>
     </div>
@@ -446,15 +559,15 @@
         <input class="input" id="wol-name" placeholder="Wake SERVER" required />
       </div>
       <div class="field">
-        <label class="label">Router Host/IP</label>
+        <label class="label">MikroTik Host/IP</label>
         <input class="input" id="wol-host" placeholder="192.168.101.1" required />
       </div>
       <div class="field">
-        <label class="label">Router User</label>
+        <label class="label">MikroTik User</label>
         <input class="input" id="wol-user" placeholder="admin" required />
       </div>
       <div class="field">
-        <label class="label">Router Password</label>
+        <label class="label">MikroTik Password</label>
         <input class="input" id="wol-pass" type="password" placeholder="********" required />
       </div>
       <div class="field">
@@ -465,12 +578,43 @@
         <label class="label">Notes</label>
         <textarea class="textarea" id="wol-notes" placeholder="What this does"></textarea>
       </div>
+
+      <div class="field">
+        <label class="label">SSH Actions (optional)</label>
+        <div class="ssh-section">
+          <div id="wol-ssh-list"></div>
+          <button class="btn" type="button" id="wol-ssh-add">+ Add SSH Action</button>
+        </div>
+      </div>
+
       <button class="btn submit" type="submit" id="wol-submit">Create WOL</button>
+    </form>
+
+    <!-- HOST ACTION FORM -->
+    <form class="form hidden" id="form-host">
+      <h3 id="host-form-title">Add Device Command</h3>
+
+      <div class="field">
+        <label class="label">Button label</label>
+        <input class="input" id="host-label" placeholder="Shutdown Termux host" required />
+      </div>
+
+      <div class="field">
+        <label class="label">Command (executed on Termux host)</label>
+        <textarea class="textarea" id="host-command" placeholder="sudo reboot"></textarea>
+      </div>
+
+      <div class="field">
+        <label class="label">Notes</label>
+        <textarea class="textarea" id="host-notes" placeholder="Short description"></textarea>
+      </div>
+
+      <button class="btn submit" type="submit" id="host-submit">Create Command</button>
     </form>
   </div>
 </div>
 
-<!-- Admin password modal (login/logout control) -->
+<!-- Admin password modal (one-shot protected actions) -->
 <div class="overlay hidden" id="admin-overlay">
   <div class="modal">
     <div class="modal-top">
@@ -490,28 +634,83 @@
   </div>
 </div>
 
+<!-- Settings modal (edit mode + battery monitoring) -->
+<div class="overlay hidden" id="settings-overlay">
+  <div class="modal">
+    <div class="modal-top">
+      <div style="font-weight:800; font-size:.9rem; color:var(--text-main);">
+        Settings
+      </div>
+      <button class="close" id="settings-close">Close</button>
+    </div>
+
+    <div class="form">
+      <h3 style="margin-top:0;">Admin session</h3>
+      <p id="settings-session-text" style="margin:0 0 .75rem; font-size:.8rem; color:var(--text-dim);"></p>
+
+      <form id="settings-login-form" class="field" style="margin-bottom:.75rem;">
+        <label class="label">Admin password</label>
+        <input class="input" id="settings-pass" type="password" placeholder="********" required />
+        <button class="btn submit" type="submit" style="margin-top:.6rem;">Unlock editing</button>
+      </form>
+
+      <div id="settings-logout-row" class="field hidden" style="margin-top:.25rem;">
+        <button class="btn btn-danger" type="button" id="settings-logout-btn">Log out</button>
+      </div>
+    </div>
+
+    <div class="form" style="margin-top:1rem;">
+      <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+        <span>Battery monitoring</span>
+        <label style="display:flex; align-items:center; gap:.4rem; font-size:.8rem; color:var(--text-mid);">
+          <input type="checkbox" id="battery-enabled" />
+          <span>Enabled</span>
+        </label>
+      </h3>
+      <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+        Only for Termux host with <b>termux-api</b> installed. Alerts are sent when battery percentage
+        drops below configured levels.
+      </p>
+
+      <div class="field">
+        <label class="label">Alert levels (%)</label>
+        <input class="input" id="battery-levels" placeholder="30,15,5" />
+        <div style="font-size:.75rem; color:var(--text-dim);">
+          Comma-separated list, highest to lowest. Example: 30,15,5
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Telegram bot token</label>
+        <input class="input" id="battery-bot-token" placeholder="123456:ABC-DEF..." />
+      </div>
+
+      <div class="field">
+        <label class="label">Telegram chat ID</label>
+        <input class="input" id="battery-chat-id" placeholder="@channel or numeric chat id" />
+      </div>
+
+      <button class="btn submit" type="button" id="battery-save-btn">Save battery settings</button>
+      <div id="battery-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+    </div>
+  </div>
+</div>
+
 <script>
   // ==============================
   // CONFIG
   // ==============================
-  // API base behind nginx reverse proxy
   const API_BASE = "/api";
-
-  // Theme key for localStorage
   const THEME_KEY = "wadphTheme";
 
-  // editMode:
-  // false -> read-only UI
-  // true  -> admin UI (Add/Edit/Delete/Drag/Run WOL)
   let editMode = false;
-
-  // dashboard state from backend
-  // (backend returns sanitized version if not admin)
-  let state = { services: [], links: [], wol: [] };
+  let state = { services: [], links: [], wol: [], hostActions: [] };
 
   // modal mode for Add/Edit forms
-  // { type:"service"|"link"|"wol", action:"create"|"edit", id:string|null }
   let mode = { type: "service", action: "create", id: null };
+
+  // pending protected action to execute after password check (one-shot)
+  let pendingAction = null;
 
   // ==============================
   // DOM refs
@@ -520,20 +719,24 @@
   const openBtn = document.getElementById("open-modal");
   const closeBtn = document.getElementById("modal-close");
 
-  const tabSvcBtn = document.getElementById("tab-service");
-  const tabLnkBtn = document.getElementById("tab-link");
-  const tabWolBtn = document.getElementById("tab-wol");
+  const tabSvcBtn  = document.getElementById("tab-service");
+  const tabLnkBtn  = document.getElementById("tab-link");
+  const tabWolBtn  = document.getElementById("tab-wol");
+  const tabHostBtn = document.getElementById("tab-host");
 
-  const formSvc = document.getElementById("form-service");
-  const formLnk = document.getElementById("form-link");
-  const formWol = document.getElementById("form-wol");
+  const formSvc  = document.getElementById("form-service");
+  const formLnk  = document.getElementById("form-link");
+  const formWol  = document.getElementById("form-wol");
+  const formHost = document.getElementById("form-host");
 
-  const svcTitleEl = document.getElementById("svc-form-title");
-  const svcSubmitEl = document.getElementById("svc-submit");
-  const lnkTitleEl = document.getElementById("lnk-form-title");
-  const lnkSubmitEl = document.getElementById("lnk-submit");
-  const wolTitleEl = document.getElementById("wol-form-title");
-  const wolSubmitEl = document.getElementById("wol-submit");
+  const svcTitleEl   = document.getElementById("svc-form-title");
+  const svcSubmitEl  = document.getElementById("svc-submit");
+  const lnkTitleEl   = document.getElementById("lnk-form-title");
+  const lnkSubmitEl  = document.getElementById("lnk-submit");
+  const wolTitleEl   = document.getElementById("wol-form-title");
+  const wolSubmitEl  = document.getElementById("wol-submit");
+  const hostTitleEl  = document.getElementById("host-form-title");
+  const hostSubmitEl = document.getElementById("host-submit");
 
   const svcGrid = document.getElementById("svc-grid");
   const lnkGrid = document.getElementById("lnk-grid");
@@ -543,17 +746,40 @@
   const lnkCount = document.getElementById("lnk-count");
   const wolCount = document.getElementById("wol-count");
 
-  // admin login/logout UI
   const adminToggleBtn = document.getElementById("admin-toggle");
   const adminOverlay   = document.getElementById("admin-overlay");
   const adminCloseBtn  = document.getElementById("admin-close");
   const adminForm      = document.getElementById("admin-form");
   const adminPassInput = document.getElementById("admin-pass");
 
-  // service form refs
   const svcMethodEl      = document.getElementById("svc-method");
   const svcCheckLabelEl  = document.getElementById("svc-check-label");
   const svcCheckInputEl  = document.getElementById("svc-check");
+
+  const refreshBtn       = document.getElementById("refresh-btn");
+
+  const wolHostInput     = document.getElementById("wol-host");
+  const wolSshList       = document.getElementById("wol-ssh-list");
+  const wolSshAddBtn     = document.getElementById("wol-ssh-add");
+
+  const hostLabelInput   = document.getElementById("host-label");
+  const hostCommandInput = document.getElementById("host-command");
+  const hostNotesInput   = document.getElementById("host-notes");
+
+  const settingsOverlay       = document.getElementById("settings-overlay");
+  const settingsCloseBtn      = document.getElementById("settings-close");
+  const settingsSessionText   = document.getElementById("settings-session-text");
+  const settingsLoginForm     = document.getElementById("settings-login-form");
+  const settingsPassInput     = document.getElementById("settings-pass");
+  const settingsLogoutRow     = document.getElementById("settings-logout-row");
+  const settingsLogoutBtn     = document.getElementById("settings-logout-btn");
+
+  const batteryEnabledInput   = document.getElementById("battery-enabled");
+  const batteryLevelsInput    = document.getElementById("battery-levels");
+  const batteryBotTokenInput  = document.getElementById("battery-bot-token");
+  const batteryChatIdInput    = document.getElementById("battery-chat-id");
+  const batterySaveBtn        = document.getElementById("battery-save-btn");
+  const batterySaveStatus     = document.getElementById("battery-save-status");
 
   // ==============================
   // THEME
@@ -579,8 +805,6 @@
   // ==============================
   // UTIL
   // ==============================
-
-  // Format ISO timestamp -> "YYYY-MM-DD HH:MM:SS"
   function fmt(ts) {
     if (!ts) return "never";
     const d = new Date(ts);
@@ -595,31 +819,31 @@
     );
   }
 
-  // Helper: send GET with cookies
   async function apiGET(path) {
     const res = await fetch(API_BASE + path, {
       credentials: "include"
     });
-    return res.json();
-  }
-
-  // Helper: send JSON with cookies
-  async function apiJSON(method, path, bodyObj) {
-    const res = await fetch(API_BASE + path, {
-      method,
-      credentials: "include",              // send session cookie
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(bodyObj)
-    });
     if (res.status === 401) {
-      // session expired -> force logout mode
       forceLogoutUI();
       return {};
     }
     return res.json().catch(() => ({}));
   }
 
-  // Helper: DELETE with cookies
+  async function apiJSON(method, path, bodyObj) {
+    const res = await fetch(API_BASE + path, {
+      method,
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(bodyObj)
+    });
+    if (res.status === 401) {
+      forceLogoutUI();
+      return {};
+    }
+    return res.json().catch(() => ({}));
+  }
+
   async function apiDELETE(path) {
     const res = await fetch(API_BASE + path, {
       method: "DELETE",
@@ -632,7 +856,6 @@
     return res.json().catch(() => ({}));
   }
 
-  // POST with no body (WOL run etc)
   async function apiPOSTNoBody(path) {
     const res = await fetch(API_BASE + path, {
       method: "POST",
@@ -645,80 +868,214 @@
     return res.json().catch(() => ({}));
   }
 
-  // ==============================
-  // LOGIN / LOGOUT FLOW
-  // ==============================
-
-  // Show login modal if locked
-  adminToggleBtn.addEventListener("click", async () => {
-    if (!editMode) {
-      // locked -> ask for password
-      adminPassInput.value = "";
-      adminOverlay.classList.remove("hidden");
-      adminPassInput.focus();
-    } else {
-      // already unlocked -> do logout
-      await logoutRequest();
-      forceLogoutUI();
+  // helper: ask for password only when needed for protected actions
+  async function ensureAdminThen(actionFn) {
+    if (editMode) {
+      await actionFn();
+      return;
     }
+    pendingAction = actionFn;
+    adminPassInput.value = "";
+    adminOverlay.classList.remove("hidden");
+    adminPassInput.focus();
+  }
+
+  // ==============================
+  // LOGIN / LOGOUT FLOW (one-shot actions)
+  // ==============================
+  adminToggleBtn.addEventListener("click", () => {
+    openSettingsModal();
   });
 
-  // Close login modal button
   adminCloseBtn.addEventListener("click", () => {
+    pendingAction = null;
     adminOverlay.classList.add("hidden");
   });
 
-  // Submit password for login
   adminForm.addEventListener("submit", async e => {
     e.preventDefault();
     const pw = adminPassInput.value;
 
-    // call /api/login {password}
     const res = await fetch(API_BASE + "/login", {
       method: "POST",
-      credentials: "include", // we want cookie back
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: pw })
     });
 
     if (res.status === 200) {
-      // success -> turn on editMode
-      editMode = true;
-      openBtn.classList.remove("hidden");
-      adminOverlay.classList.add("hidden");
+      const isQuickAction = !!pendingAction;
 
-      // reload state with full sensitive data
-      await loadStateFromServer();
-      render();
+      // For one-shot WOL/SSH/host actions: execute and stay in normal mode
+      if (isQuickAction && pendingAction) {
+        adminOverlay.classList.add("hidden");
+        const fn = pendingAction;
+        pendingAction = null;
+
+        await loadStateFromServer();
+        await fn();
+      } else {
+        // Fallback: if called without pendingAction, do not enable editMode here
+        adminOverlay.classList.add("hidden");
+      }
     } else {
-      // wrong password
       adminPassInput.value = "";
       adminPassInput.focus();
     }
   });
 
   async function logoutRequest() {
-    // ask backend to drop session
     await fetch(API_BASE + "/logout", {
       method: "POST",
       credentials: "include"
     });
   }
 
+  function updateBatteryFormDisabled() {
+    const disabled = !editMode;
+    const inputs = [
+      batteryEnabledInput,
+      batteryLevelsInput,
+      batteryBotTokenInput,
+      batteryChatIdInput,
+      batterySaveBtn
+    ];
+    inputs.forEach(el => {
+      if (!el) return;
+      el.disabled = disabled;
+    });
+  }
+
   function forceLogoutUI() {
-    // turn off local admin mode
     editMode = false;
+    pendingAction = null;
     openBtn.classList.add("hidden");
+    updateBatteryFormDisabled();
+    if (settingsOverlay) {
+      settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
+      settingsLoginForm.classList.remove("hidden");
+      settingsLogoutRow.classList.add("hidden");
+    }
     render();
   }
+
+  // ==============================
+  // SETTINGS MODAL (edit mode + battery alerts)
+  // ==============================
+  async function loadBatteryConfigIntoForm() {
+    if (!batteryEnabledInput) return;
+    const cfg = await apiGET("/battery-alerts");
+    if (!cfg) return;
+
+    batteryEnabledInput.checked = !!cfg.enabled;
+    if (Array.isArray(cfg.levels) && cfg.levels.length) {
+      batteryLevelsInput.value = cfg.levels.join(",");
+    } else {
+      batteryLevelsInput.value = "30,15,5";
+    }
+    batteryBotTokenInput.value = cfg.telegramBotToken || "";
+    batteryChatIdInput.value = cfg.telegramChatId || "";
+    batterySaveStatus.textContent = "";
+  }
+
+  function openSettingsModal() {
+    if (!settingsOverlay) return;
+    settingsOverlay.classList.remove("hidden");
+
+    if (editMode) {
+      settingsSessionText.textContent = "Edit mode is enabled for this browser session.";
+      settingsLoginForm.classList.add("hidden");
+      settingsLogoutRow.classList.remove("hidden");
+      updateBatteryFormDisabled();
+      loadBatteryConfigIntoForm();
+    } else {
+      settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
+      settingsLoginForm.classList.remove("hidden");
+      settingsLogoutRow.classList.add("hidden");
+      settingsPassInput.value = "";
+      settingsPassInput.focus();
+      updateBatteryFormDisabled();
+    }
+  }
+
+  function closeSettingsModal() {
+    if (!settingsOverlay) return;
+    settingsOverlay.classList.add("hidden");
+  }
+
+  settingsCloseBtn.addEventListener("click", closeSettingsModal);
+
+  settingsLoginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = settingsPassInput.value;
+    if (!pw) return;
+
+    const res = await fetch(API_BASE + "/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw })
+    });
+
+    if (res.status === 200) {
+      editMode = true;
+      openBtn.classList.remove("hidden");
+
+      settingsSessionText.textContent = "Edit mode is enabled for this browser session.";
+      settingsLoginForm.classList.add("hidden");
+      settingsLogoutRow.classList.remove("hidden");
+
+      await loadStateFromServer();
+      updateBatteryFormDisabled();
+      await loadBatteryConfigIntoForm();
+    } else {
+      settingsPassInput.value = "";
+      settingsPassInput.focus();
+    }
+  });
+
+  settingsLogoutBtn.addEventListener("click", async () => {
+    await logoutRequest();
+    forceLogoutUI();
+  });
+
+  batterySaveBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+
+    const enabled = !!batteryEnabledInput.checked;
+    const rawLevels = batteryLevelsInput.value || "";
+    const levels = rawLevels
+      .split(/[,\s]+/)
+      .map(x => parseInt(x, 10))
+      .filter(n => Number.isFinite(n) && n > 0 && n <= 100);
+
+    const body = {
+      enabled,
+      levels: levels.length ? levels : undefined,
+      telegramBotToken: batteryBotTokenInput.value.trim(),
+      telegramChatId: batteryChatIdInput.value.trim()
+    };
+
+    batterySaveStatus.textContent = "Saving...";
+    const resp = await apiJSON("PUT", "/battery-alerts", body);
+    if (resp && resp.ok) {
+      batterySaveStatus.textContent = "Saved.";
+    } else {
+      batterySaveStatus.textContent = "Error saving settings.";
+    }
+  });
 
   // ==============================
   // SERVER SYNC
   // ==============================
   async function loadStateFromServer() {
-    // GET /api/state always works
     const data = await apiGET("/state");
-    state = data;
+    state = {
+      services: data.services || [],
+      links: data.links || [],
+      wol: data.wol || [],
+      hostActions: data.hostActions || []
+    };
     render();
   }
 
@@ -740,8 +1097,6 @@
   // ==============================
   // MODAL / FORMS
   // ==============================
-
-  // Update label/placeholder for service check field depending on method
   function updateSvcCheckLabel() {
     if (svcMethodEl.value === "ping") {
       svcCheckLabelEl.textContent = "Host/IP to ping";
@@ -769,6 +1124,10 @@
     document.getElementById("lnk-notes").value = "";
   }
 
+  function clearWolSshForm() {
+    wolSshList.innerHTML = "";
+  }
+
   function resetWolForm() {
     document.getElementById("wol-name").value   = "";
     document.getElementById("wol-host").value   = "";
@@ -776,6 +1135,13 @@
     document.getElementById("wol-pass").value   = "";
     document.getElementById("wol-script").value = "";
     document.getElementById("wol-notes").value  = "";
+    clearWolSshForm();
+  }
+
+  function resetHostForm() {
+    hostLabelInput.value   = "";
+    hostCommandInput.value = "";
+    hostNotesInput.value   = "";
   }
 
   function updateFormTitles() {
@@ -795,13 +1161,21 @@
         lnkTitleEl.textContent  = "Edit Link";
         lnkSubmitEl.textContent = "Save Changes";
       }
-    } else {
+    } else if (mode.type === "wol") {
       if (mode.action === "create") {
         wolTitleEl.textContent  = "Add WOL";
         wolSubmitEl.textContent = "Create WOL";
       } else {
         wolTitleEl.textContent  = "Edit WOL";
         wolSubmitEl.textContent = "Save Changes";
+      }
+    } else {
+      if (mode.action === "create") {
+        hostTitleEl.textContent  = "Add Device Command";
+        hostSubmitEl.textContent = "Create Command";
+      } else {
+        hostTitleEl.textContent  = "Edit Device Command";
+        hostSubmitEl.textContent = "Save Changes";
       }
     }
   }
@@ -810,14 +1184,82 @@
     formSvc.classList.add("hidden");
     formLnk.classList.add("hidden");
     formWol.classList.add("hidden");
+    formHost.classList.add("hidden");
 
     if (which === "service") formSvc.classList.remove("hidden");
     if (which === "link")    formLnk.classList.remove("hidden");
     if (which === "wol")     formWol.classList.remove("hidden");
+    if (which === "host")    formHost.classList.remove("hidden");
+  }
+
+  function createWolSshRow(action) {
+    const row = document.createElement("div");
+    row.className = "ssh-row";
+
+    const labelInput = document.createElement("input");
+    labelInput.className = "input ssh-input";
+    labelInput.placeholder = "Button label (e.g. Shutdown PC)";
+    labelInput.value = action.label || "";
+    labelInput.dataset.field = "label";
+
+    const userInput = document.createElement("input");
+    userInput.className = "input ssh-input";
+    userInput.placeholder = "SSH user";
+    userInput.value = action.user || "";
+    userInput.dataset.field = "user";
+
+    const hostInput = document.createElement("input");
+    hostInput.className = "input ssh-input";
+    hostInput.placeholder = "SSH host (default: MikroTik Host/IP)";
+    hostInput.value = action.host || wolHostInput.value.trim();
+    hostInput.dataset.field = "host";
+
+    const cmdInput = document.createElement("input");
+    cmdInput.className = "input ssh-input";
+    cmdInput.placeholder = "SSH command (e.g. sudo systemctl poweroff)";
+    cmdInput.value = action.command || "";
+    cmdInput.dataset.field = "command";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-danger";
+    removeBtn.textContent = "Remove";
+    removeBtn.onclick = () => row.remove();
+
+    row.appendChild(labelInput);
+    row.appendChild(userInput);
+    row.appendChild(hostInput);
+    row.appendChild(cmdInput);
+    row.appendChild(removeBtn);
+
+    return row;
+  }
+
+  wolSshAddBtn.addEventListener("click", () => {
+    const row = createWolSshRow({ host: wolHostInput.value.trim() });
+    wolSshList.appendChild(row);
+  });
+
+  function collectWolSshActions() {
+    const actions = [];
+    const rows = wolSshList.querySelectorAll(".ssh-row");
+    rows.forEach(row => {
+      const label = row.querySelector("input[data-field='label']").value.trim();
+      const user  = row.querySelector("input[data-field='user']").value.trim();
+      const host  = row.querySelector("input[data-field='host']").value.trim();
+      const cmd   = row.querySelector("input[data-field='command']").value.trim();
+      if (!label || !user || !cmd) return;
+      actions.push({
+        label,
+        user,
+        host,
+        command: cmd
+      });
+    });
+    return actions;
   }
 
   function showModal(whichType, editId = null) {
-    // Only allow if admin (editMode true)
     if (!editMode) return;
 
     mode.type   = whichType;
@@ -854,7 +1296,7 @@
       } else {
         resetLinkForm();
       }
-    } else {
+    } else if (whichType === "wol") {
       showOnlyForm("wol");
       if (mode.action === "edit") {
         const task = state.wol.find(w => w.id === mode.id);
@@ -865,9 +1307,28 @@
           document.getElementById("wol-pass").value   = task.pass     || "";
           document.getElementById("wol-script").value = task.scriptId || "";
           document.getElementById("wol-notes").value  = task.notes    || "";
+          clearWolSshForm();
+          if (Array.isArray(task.sshActions)) {
+            task.sshActions.forEach(a => {
+              const row = createWolSshRow(a);
+              wolSshList.appendChild(row);
+            });
+          }
         }
       } else {
         resetWolForm();
+      }
+    } else if (whichType === "host") {
+      showOnlyForm("host");
+      if (mode.action === "edit") {
+        const action = state.hostActions.find(a => a.id === mode.id);
+        if (action) {
+          hostLabelInput.value   = action.label || "";
+          hostCommandInput.value = action.command || "";
+          hostNotesInput.value   = action.notes || "";
+        }
+      } else {
+        resetHostForm();
       }
     }
 
@@ -884,6 +1345,7 @@
   tabSvcBtn.addEventListener("click", () => showModal("service", mode.action === "edit" ? mode.id : null));
   tabLnkBtn.addEventListener("click", () => showModal("link",    mode.action === "edit" ? mode.id : null));
   tabWolBtn.addEventListener("click", () => showModal("wol",     mode.action === "edit" ? mode.id : null));
+  tabHostBtn.addEventListener("click", () => showModal("host",   mode.action === "edit" ? mode.id : null));
 
   // ==============================
   // FORM SUBMIT HANDLERS (CRUD)
@@ -943,7 +1405,8 @@
       user:     document.getElementById("wol-user").value.trim(),
       pass:     document.getElementById("wol-pass").value.trim(),
       scriptId: document.getElementById("wol-script").value.trim(),
-      notes:    document.getElementById("wol-notes").value.trim()
+      notes:    document.getElementById("wol-notes").value.trim(),
+      sshActions: collectWolSshActions()
     };
     if (!body.name || !body.host || !body.user || !body.pass || !body.scriptId) return;
 
@@ -957,35 +1420,99 @@
     await loadStateFromServer();
   });
 
+  formHost.addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!editMode) return;
+
+    const body = {
+      label:   hostLabelInput.value.trim(),
+      command: hostCommandInput.value.trim(),
+      notes:   hostNotesInput.value.trim()
+    };
+    if (!body.label || !body.command) return;
+
+    if (mode.action === "edit" && mode.id) {
+      await apiJSON("PUT", "/host-action/" + mode.id, body);
+    } else {
+      await apiJSON("POST", "/host-action", body);
+    }
+
+    hideModal();
+    await loadStateFromServer();
+  });
+
   // ==============================
-  // DELETE HANDLERS
+  // DELETE HANDLERS (with confirm)
   // ==============================
   async function deleteService(id) {
     if (!editMode) return;
+    const svc = state.services.find(s => s.id === id);
+    const name = svc ? svc.name : id;
+    const ok = window.confirm(`Delete service "${name}"? This cannot be undone.`);
+    if (!ok) return;
     await apiDELETE("/service/" + id);
     await loadStateFromServer();
   }
+
   async function deleteLink(id) {
     if (!editMode) return;
+    const lnk = state.links.find(l => l.id === id);
+    const name = lnk ? lnk.title : id;
+    const ok = window.confirm(`Delete link "${name}"? This cannot be undone.`);
+    if (!ok) return;
     await apiDELETE("/link/" + id);
     await loadStateFromServer();
   }
+
   async function deleteWol(id) {
     if (!editMode) return;
+    const task = state.wol.find(w => w.id === id);
+    const name = task ? task.name : id;
+    const ok = window.confirm(`Delete WOL task "${name}"? This cannot be undone.`);
+    if (!ok) return;
     await apiDELETE("/wol/" + id);
     await loadStateFromServer();
   }
 
+  async function deleteHostAction(id) {
+    if (!editMode) return;
+    const action = state.hostActions.find(a => a.id === id);
+    const name = action ? action.label : id;
+    const ok = window.confirm(`Delete device command "${name}"? This cannot be undone.`);
+    if (!ok) return;
+    await apiDELETE("/host-action/" + id);
+    await loadStateFromServer();
+  }
+
   // ==============================
-  // WOL RUN
+  // WOL RUN / SSH RUN / HOST RUN
   // ==============================
   async function runWol(id) {
-    if (!editMode) return;
     const resp = await apiPOSTNoBody("/wol/" + id + "/run");
     if (resp && resp.ok) {
       alert("Executed");
     } else {
       alert("Error: " + (resp && resp.result ? resp.result : "unknown"));
+    }
+    await loadStateFromServer();
+  }
+
+  async function runWolSsh(wolId, actionId) {
+    const resp = await apiPOSTNoBody(`/wol/${wolId}/ssh/${actionId}/run`);
+    if (resp && resp.ok) {
+      alert("SSH action executed");
+    } else {
+      alert("SSH error: " + (resp && resp.result ? resp.result : "unknown"));
+    }
+    await loadStateFromServer();
+  }
+
+  async function runHostAction(id) {
+    const resp = await apiPOSTNoBody(`/host-action/${id}/run`);
+    if (resp && resp.ok) {
+      alert("Device command executed");
+    } else {
+      alert("Command error: " + (resp && resp.result ? resp.result : "unknown"));
     }
     await loadStateFromServer();
   }
@@ -1002,7 +1529,6 @@
     const cards = Array.from(cont.querySelectorAll(`.card[data-type='${type}']`));
 
     cards.forEach((card, idx) => {
-      // enable drag only in editMode
       if (editMode) {
         card.setAttribute("draggable", "true");
       } else {
@@ -1105,13 +1631,14 @@
       if (lastCard) lastCard.classList.add("full-span");
     }
 
-    // bind drag for each
+    // host actions in banner
+    renderHostActions();
+
     bindDrag("svc-grid", "service", state.services, persistOrderServices);
     bindDrag("lnk-grid", "link", state.links, persistOrderLinks);
     bindDrag("wol-grid", "wol", state.wol, persistOrderWOL);
   }
 
-  // Render one Service card
   function renderServiceCard(s) {
     const card = document.createElement("div");
     card.className = "card";
@@ -1152,7 +1679,6 @@
     const right = document.createElement("div");
     right.className = "btn-row";
 
-    // Open is always visible
     const openBtn = document.createElement("a");
     openBtn.className = "btn";
     openBtn.textContent = "Open";
@@ -1161,7 +1687,6 @@
     openBtn.rel = "noopener";
     right.appendChild(openBtn);
 
-    // Edit/Delete only in admin mode
     if (editMode) {
       const editBtn = document.createElement("button");
       editBtn.className = "btn";
@@ -1194,7 +1719,6 @@
     return card;
   }
 
-  // Render one Link card
   function renderLinkCard(l) {
     const card = document.createElement("div");
     card.className = "card";
@@ -1265,7 +1789,6 @@
     return card;
   }
 
-  // Render one WOL card
   function renderWolCard(w) {
     const card = document.createElement("div");
     card.className = "card";
@@ -1299,14 +1822,26 @@
     const right = document.createElement("div");
     right.className = "btn-row";
 
-    // Buttons only visible in admin mode now (Run/Edit/Delete)
-    if (editMode) {
-      const runBtn = document.createElement("button");
-      runBtn.className = "btn";
-      runBtn.textContent = "Run";
-      runBtn.onclick = () => runWol(w.id);
-      right.appendChild(runBtn);
+    // Run WOL always visible, password-protected when not in edit mode
+    const runBtn = document.createElement("button");
+    runBtn.className = "btn";
+    runBtn.textContent = "Run";
+    runBtn.onclick = () => ensureAdminThen(() => runWol(w.id));
+    right.appendChild(runBtn);
 
+    // SSH actions always visible, password-protected when not in edit mode
+    if (Array.isArray(w.sshActions)) {
+      w.sshActions.forEach(a => {
+        const sshBtn = document.createElement("button");
+        sshBtn.className = "btn";
+        sshBtn.textContent = a.label || "SSH";
+        sshBtn.onclick = () => ensureAdminThen(() => runWolSsh(w.id, a.id));
+        right.appendChild(sshBtn);
+      });
+    }
+
+    // Edit/delete only in edit mode
+    if (editMode) {
       const editBtn = document.createElement("button");
       editBtn.className = "btn";
       editBtn.textContent = "Edit";
@@ -1327,6 +1862,143 @@
     return card;
   }
 
+  function renderHostActions() {
+    const container = document.getElementById("host-actions");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (!state.hostActions || state.hostActions.length === 0) {
+      const span = document.createElement("span");
+      span.className = "host-actions-note";
+      span.textContent = editMode
+        ? "No maintenance commands yet"
+        : "No maintenance commands available";
+      container.appendChild(span);
+
+      if (editMode) {
+        const addBtn = document.createElement("button");
+        addBtn.className = "btn";
+        addBtn.textContent = "+ Add Cmd";
+        addBtn.style.marginLeft = "0.5rem";
+        addBtn.onclick = () => {
+          mode.action = "create";
+          mode.id = null;
+          showModal("host");
+        };
+        container.appendChild(addBtn);
+      }
+      return;
+    }
+
+    state.hostActions.forEach(action => {
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.flexWrap = "wrap";
+      wrap.style.gap = "0.25rem";
+      wrap.style.alignItems = "center";
+      wrap.style.justifyContent = "center";
+
+      const runBtn = document.createElement("button");
+      runBtn.className = "btn";
+      runBtn.textContent = action.label || "Command";
+      runBtn.onclick = () => ensureAdminThen(() => runHostAction(action.id));
+      wrap.appendChild(runBtn);
+
+      if (editMode) {
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn";
+        editBtn.textContent = "Edit";
+        editBtn.onclick = () => {
+          mode.action = "edit";
+          mode.id = action.id;
+          showModal("host", action.id);
+        };
+        wrap.appendChild(editBtn);
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn btn-danger";
+        delBtn.textContent = "Delete";
+        delBtn.onclick = () => deleteHostAction(action.id);
+        wrap.appendChild(delBtn);
+      }
+
+      container.appendChild(wrap);
+    });
+
+    if (editMode) {
+      const addBtn = document.createElement("button");
+      addBtn.className = "btn";
+      addBtn.textContent = "+ Add Cmd";
+      addBtn.onclick = () => {
+        mode.action = "create";
+        mode.id = null;
+        showModal("host");
+      };
+      container.appendChild(addBtn);
+    }
+  }
+
+  // ==============================
+  // HOST INFO (info.sh)
+  // ==============================
+  function fmtShort(ts){
+    if (!ts) return "—";
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  async function loadHostInfo() {
+    try {
+      const res = await fetch(API_BASE + "/hostinfo", { credentials: "include" });
+      const info = await res.json();
+
+      const upd = document.getElementById("host-updated");
+      const box = document.getElementById("host-stats");
+      if (!box) return;
+
+      const chips = [];
+
+      if (info.ip) chips.push(`<span class="host-chip"><b>IP</b>${info.ip}</span>`);
+      if (Number.isFinite(info.rssi)) chips.push(`<span class="host-chip"><b>RSSI</b>${info.rssi} dBm</span>`);
+      if (info.ssid) chips.push(`<span class="host-chip"><b>SSID</b>${info.ssid}</span>`);
+      if (info.health) chips.push(`<span class="host-chip"><b>Battery</b>${info.health}</span>`);
+      if (info.status) chips.push(`<span class="host-chip"><b>Status</b>${info.status}</span>`);
+      if (Number.isFinite(info.temperature)) chips.push(`<span class="host-chip"><b>Temp</b>${info.temperature}°C</span>`);
+      if (Number.isFinite(info.percentage)) chips.push(`<span class="host-chip"><b>Charge</b>${info.percentage}%</span>`);
+
+      if (!chips.length) chips.push(`<span class="host-chip">No data</span>`);
+
+      box.innerHTML = chips.join("");
+
+      upd.textContent = info.ok
+        ? `Updated ${fmtShort(info.updatedAt)}`
+        : `Last attempt ${fmtShort(info.updatedAt)} — error`;
+    } catch {
+      const upd = document.getElementById("host-updated");
+      const box = document.getElementById("host-stats");
+      if (upd) upd.textContent = "Host info unavailable";
+      if (box) box.innerHTML = `<span class="host-chip">No data</span>`;
+    }
+  }
+
+  // ==============================
+  // MANUAL REFRESH BUTTON
+  // ==============================
+  refreshBtn.addEventListener("click", async () => {
+    try {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing...";
+      await apiPOSTNoBody("/refresh");
+      await loadStateFromServer();
+      await loadHostInfo();
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "Refresh";
+    }
+  });
+
   // ==============================
   // AUTO REFRESH
   // ==============================
@@ -1338,14 +2010,14 @@
   // INIT
   // ==============================
   (async function init() {
-    // hide Add until admin unlock
     openBtn.classList.add("hidden");
+    updateBatteryFormDisabled();
 
-    // first load
     await loadStateFromServer();
+    await loadHostInfo();
 
-    // periodic refresh of dashboard data
     setInterval(refreshLoop, 10000);
+    setInterval(loadHostInfo, 60000);
   })();
 </script>
 </body>
