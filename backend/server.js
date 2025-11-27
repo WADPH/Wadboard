@@ -1,6 +1,6 @@
-// Wadboard API with session auth
+// WADPH Dashboard API with session auth
 //
-// Data model on disk (data.json):
+// Data model on disk (wadph-data.json):
 // db = {
 //   services: [
 //     { id, name, openUrl, checkUrl, method, notes,
@@ -12,25 +12,25 @@
 //   ],
 //   wol: [
 //     { id, name, host, user, pass, scriptId, notes,
-//       lastRun, lastResult }
-//   ]
+//       lastRun, lastResult,
+//       sshActions: [
+//         { id, label, host, user, command, lastRun, lastResult }
+//       ]
+//     }
+//   ],
+//   hostActions: [
+//     { id, label, command, notes, lastRun, lastResult }
+//   ],
+//   config: {
+//     batteryAlerts: {
+//       enabled: boolean,
+//       levels: [number, ...],
+//       telegramBotToken: string,
+//       telegramChatId: string,
+//       lastNotifiedLevel: number|null
+//     }
+//   }
 // }
-//
-// Security model:
-// - Client sends password once to /api/login
-// - Server compares with ADMIN_PASSWORD (kept ONLY here)
-// - If ok -> server creates a session token and sets cookie adminToken (HttpOnly, SameSite=Strict)
-// - For any modifying endpoint we require a valid session via requireAdmin()
-// - /api/state returns sanitized data if not admin (WOL creds hidden)
-// - No admin password is ever sent to frontend
-//
-// Requirements in package.json:
-//   "type": "module",
-//   deps: express, cookie-parser, node-fetch
-//
-// Termux note for "ping":
-// child_process.exec('ping -c 1 -w 2 host') must work in your Termux.
-// If ping is blocked, "ping" health check will always be DOWN.
 
 import express from "express";
 import cookieParser from "cookie-parser";
@@ -42,10 +42,13 @@ import https from "https";
 import { exec } from "child_process";
 import crypto from "crypto";
 
+// -----------------------
+// Paths / files
+// -----------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const DATA_FILE = path.join(__dirname, "data.json");
+const DATA_FILE = path.join(__dirname, "wadph-data.json");
 
 // -----------------------
 // Admin password (change this)
@@ -59,20 +62,17 @@ const sessions = {}; // { token: { createdAt: number } }
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function createSession() {
-  // generate random 32-byte hex token
   const token = crypto.randomBytes(32).toString("hex");
   sessions[token] = { createdAt: Date.now() };
   return token;
 }
 
 function getSession(req) {
-  // read and validate session by cookie
   const token = req.cookies.adminToken;
   if (!token) return null;
   const sess = sessions[token];
   if (!sess) return null;
 
-  // expire old sessions
   if (Date.now() - sess.createdAt > SESSION_TTL_MS) {
     delete sessions[token];
     return null;
@@ -81,7 +81,6 @@ function getSession(req) {
 }
 
 function requireAdmin(req, res, next) {
-  // middleware to protect sensitive routes
   const s = getSession(req);
   if (!s) {
     return res.status(401).json({ error: "unauthorized" });
@@ -93,80 +92,129 @@ function requireAdmin(req, res, next) {
 // -----------------------
 // In-memory DB
 // -----------------------
+function defaultBatteryAlertsConfig() {
+  return {
+    enabled: false,
+    levels: [30, 15, 5],
+    telegramBotToken: "",
+    telegramChatId: "",
+    lastNotifiedLevel: null
+  };
+}
+
 let db = {
   services: [],
   links: [],
-  wol: []
+  wol: [],
+  hostActions: [],
+  config: {
+    batteryAlerts: defaultBatteryAlertsConfig()
+  }
 };
 
-// Load DB from disk
+function makeId(prefix) {
+  return prefix + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+}
+
+function ensureConfigStructure() {
+  if (!db.config || typeof db.config !== "object") {
+    db.config = {};
+  }
+  if (!db.config.batteryAlerts || typeof db.config.batteryAlerts !== "object") {
+    db.config.batteryAlerts = defaultBatteryAlertsConfig();
+  } else {
+    const cfg = db.config.batteryAlerts;
+    if (cfg.enabled === undefined) cfg.enabled = false;
+    if (!Array.isArray(cfg.levels) || !cfg.levels.length) cfg.levels = [30, 15, 5];
+    if (typeof cfg.telegramBotToken !== "string") cfg.telegramBotToken = "";
+    if (typeof cfg.telegramChatId !== "string") cfg.telegramChatId = "";
+    if (!("lastNotifiedLevel" in cfg)) cfg.lastNotifiedLevel = null;
+  }
+}
+
+function getBatteryAlertsConfig() {
+  ensureConfigStructure();
+  return db.config.batteryAlerts;
+}
+
 function loadDB() {
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf8");
     db = JSON.parse(raw);
 
-    // normalize services
     db.services = Array.isArray(db.services) ? db.services : [];
     db.services.forEach(svc => {
       if (svc.notes === undefined)       svc.notes = "";
       if (svc.lastStatus === undefined)  svc.lastStatus = "unknown";
       if (svc.lastChecked === undefined) svc.lastChecked = null;
-      if (svc.method === undefined)      svc.method = "http"; // default
+      if (svc.method === undefined)      svc.method = "http";
     });
 
-    // normalize links
     db.links = Array.isArray(db.links) ? db.links : [];
     db.links.forEach(lnk => {
       if (lnk.notes === undefined) lnk.notes = "";
       if (lnk.icon === undefined)  lnk.icon = "🔗";
     });
 
-    // normalize wol
     db.wol = Array.isArray(db.wol) ? db.wol : [];
     db.wol.forEach(task => {
       if (task.notes === undefined)      task.notes = "";
       if (task.lastRun === undefined)    task.lastRun = null;
       if (task.lastResult === undefined) task.lastResult = "never";
+
+      if (!Array.isArray(task.sshActions)) {
+        task.sshActions = [];
+      }
+      task.sshActions.forEach(a => {
+        if (!a.id) a.id = makeId("ssh");
+        if (a.lastRun === undefined) a.lastRun = null;
+        if (a.lastResult === undefined) a.lastResult = "never";
+      });
     });
 
+    db.hostActions = Array.isArray(db.hostActions) ? db.hostActions : [];
+    db.hostActions.forEach(a => {
+      if (!a.id) a.id = makeId("host");
+      if (a.notes === undefined) a.notes = "";
+      if (a.lastRun === undefined) a.lastRun = null;
+      if (a.lastResult === undefined) a.lastResult = "never";
+    });
+
+    ensureConfigStructure();
   } catch (err) {
     console.error("Failed to load DB file. Using empty DB.");
-    db = { services: [], links: [], wol: [] };
+    db = {
+      services: [],
+      links: [],
+      wol: [],
+      hostActions: [],
+      config: {
+        batteryAlerts: defaultBatteryAlertsConfig()
+      }
+    };
   }
 }
 
-// Save DB to disk
 function saveDB() {
+  ensureConfigStructure();
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf8");
-}
-
-// Generate unique id
-function makeId(prefix) {
-  return prefix + "-" + Date.now();
 }
 
 // -----------------------
 // Health check helpers
 // -----------------------
-
-// HTTPS agent that ignores self-signed certs
 const insecureAgent = new https.Agent({
   rejectUnauthorized: false
 });
 
-// Decide if HTTP status is "UP"
 function isHealthyHttpStatus(code) {
-  // 200-399 -> UP
-  // 401/403 -> UP (alive but needs auth)
   if ((code >= 200 && code < 400) || code === 401 || code === 403) {
     return true;
   }
   return false;
 }
 
-// Perform HTTP(S) GET (with optional insecure TLS)
 async function httpAlive(urlToCheck) {
-  // returns true if considered UP
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
 
@@ -180,13 +228,11 @@ async function httpAlive(urlToCheck) {
   }
 
   try {
-    // normal attempt
     const ok1 = await tryOnce(false);
     if (ok1) {
       clearTimeout(timer);
       return true;
     }
-    // second attempt with insecure TLS
     try {
       const ok2 = await tryOnce(true);
       clearTimeout(timer);
@@ -196,7 +242,6 @@ async function httpAlive(urlToCheck) {
       return false;
     }
   } catch {
-    // first attempt threw
     try {
       const ok2 = await tryOnce(true);
       clearTimeout(timer);
@@ -208,11 +253,8 @@ async function httpAlive(urlToCheck) {
   }
 }
 
-// Ping via system ping (ICMP)
 function pingHostOnce(host) {
   return new Promise(resolve => {
-    // -c 1 : send 1 packet
-    // -w 2 : 2s timeout
     exec(`ping -c 1 -w 2 ${host}`, (error) => {
       if (error) resolve(false);
       else resolve(true);
@@ -220,11 +262,7 @@ function pingHostOnce(host) {
   });
 }
 
-// Probe one service
 async function probeService(svc) {
-  // svc.method:
-  //   "http" -> GET svc.checkUrl
-  //   "ping" -> ICMP ping svc.checkUrl (hostname/IP)
   let status = "DOWN";
 
   if (svc.method === "ping") {
@@ -247,7 +285,6 @@ async function probeService(svc) {
   svc.lastChecked = new Date().toISOString();
 }
 
-// Probe all services periodically
 async function healthCheckAll() {
   try {
     for (const svc of db.services) {
@@ -260,15 +297,8 @@ async function healthCheckAll() {
 }
 
 // -----------------------
-// Execute WOL task (MikroTik script)
+// WOL execution (MikroTik)
 // -----------------------
-//
-// We call:
-// POST http://<host>/rest/system/script/run
-// Authorization: Basic base64(user:pass)
-// Body: { ".id":"*<scriptId>" }
-//
-// We store lastRun and lastResult in db.
 async function executeWOLTask(task) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
@@ -310,11 +340,85 @@ async function executeWOLTask(task) {
 }
 
 // -----------------------
-// Helpers to sanitize state for clients
+// SSH execution (generic)
 // -----------------------
-//
-// If user is not admin we do NOT expose router creds etc.
-// We only send minimal WOL info (name, notes, lastRun, lastResult).
+function escapeShellSingleQuotes(str) {
+  return String(str).replace(/'/g, `'\\''`);
+}
+
+function executeSSHAction(task, action) {
+  return new Promise(resolve => {
+    const host = (action.host || task.host || "").trim();
+    const user = (action.user || "").trim();
+    const command = (action.command || "").trim();
+
+    if (!host || !user || !command) {
+      const result = "invalid_config";
+      action.lastRun = new Date().toISOString();
+      action.lastResult = result;
+      saveDB();
+      return resolve({ ok: false, result });
+    }
+
+    const safeCmd = escapeShellSingleQuotes(command);
+    const sshCmd = `ssh -o BatchMode=yes -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`;
+
+    exec(sshCmd, { timeout: 10000 }, (error) => {
+      let result;
+      let okFlag;
+      if (error) {
+        okFlag = false;
+        result = "error";
+      } else {
+        okFlag = true;
+        result = "ok";
+      }
+      action.lastRun = new Date().toISOString();
+      action.lastResult = result;
+      saveDB();
+      resolve({ ok: okFlag, result });
+    });
+  });
+}
+
+// -----------------------
+// Local host actions execution (Termux)
+// -----------------------
+const INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
+const SHELL_BIN   = "/data/data/com.termux/files/usr/bin/bash";
+
+function executeHostAction(action) {
+  return new Promise(resolve => {
+    const cmd = (action.command || "").trim();
+    if (!cmd) {
+      const result = "invalid_command";
+      action.lastRun = new Date().toISOString();
+      action.lastResult = result;
+      saveDB();
+      return resolve({ ok: false, result });
+    }
+
+    exec(cmd, { timeout: 15000, shell: SHELL_BIN }, (error) => {
+      let result;
+      let okFlag;
+      if (error) {
+        okFlag = false;
+        result = "error";
+      } else {
+        okFlag = true;
+        result = "ok";
+      }
+      action.lastRun = new Date().toISOString();
+      action.lastResult = result;
+      saveDB();
+      resolve({ ok: okFlag, result });
+    });
+  });
+}
+
+// -----------------------
+// State sanitization
+// -----------------------
 function sanitizeForClient(isAdmin) {
   if (isAdmin) {
     return db;
@@ -328,9 +432,25 @@ function sanitizeForClient(isAdmin) {
       name:       w.name,
       notes:      w.notes || "",
       lastRun:    w.lastRun || null,
-      lastResult: w.lastResult || "never"
-      // host/user/pass/scriptId are hidden if not admin
-    }))
+      lastResult: w.lastResult || "never",
+      sshActions: Array.isArray(w.sshActions)
+        ? w.sshActions.map(a => ({
+            id: a.id,
+            label: a.label,
+            lastRun: a.lastRun || null,
+            lastResult: a.lastResult || "never"
+          }))
+        : []
+    })),
+    hostActions: Array.isArray(db.hostActions)
+      ? db.hostActions.map(a => ({
+          id: a.id,
+          label: a.label,
+          notes: a.notes || "",
+          lastRun: a.lastRun || null,
+          lastResult: a.lastResult || "never"
+        }))
+      : []
   };
 }
 
@@ -339,16 +459,220 @@ function sanitizeForClient(isAdmin) {
 // -----------------------
 const app = express();
 
-// Parse JSON and cookies
 app.use(express.json());
 app.use(cookieParser());
 
 // -----------------------
+// Termux info.sh integration (host info header)
+// -----------------------
+let hostInfo = {
+  ip: null,
+  rssi: null,
+  ssid: null,
+  health: null,
+  status: null,
+  temperature: null,
+  percentage: null,
+  updatedAt: null,
+  ok: false,
+  lastError: null
+};
+
+function parseInfoOutput(text) {
+  const out = {};
+  const re = /^\s*"([^"]+)"\s*:\s*(.+?)(,|\s*$)/gm;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const k = m[1];
+    let v = m[2].trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+    if (!isNaN(Number(v))) v = Number(v);
+    out[k] = v;
+  }
+  return {
+    ip:          out.ip ?? null,
+    rssi:        out.rssi ?? null,
+    ssid:        out.ssid ?? null,
+    health:      out.health ?? null,
+    status:      out.status ?? null,
+    temperature: out.temperature ?? null,
+    percentage:  out.percentage ?? null
+  };
+}
+
+// -----------------------
+// Battery alerts (Telegram)
+// -----------------------
+async function sendBatteryAlert(level, percentage) {
+  const cfg = getBatteryAlertsConfig();
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) {
+    console.warn("Battery alert enabled but Telegram token/chat not configured");
+    return false;
+  }
+
+  const text = `🪫Wadboard host battery low: ${percentage}% (threshold ${level}%)`;
+  const url = `https://api.telegram.org/bot${cfg.telegramBotToken}/sendMessage`;
+  const payload = {
+    chat_id: cfg.telegramChatId,
+    text
+  };
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      console.error("Battery alert send failed:", res.status, res.statusText);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Battery alert send error:", err && err.message ? err.message : err);
+    return false;
+  }
+}
+
+function checkBatteryAlerts() {
+  const cfg = getBatteryAlertsConfig();
+  if (!cfg.enabled) return;
+
+  const pct = Number(hostInfo.percentage);
+  if (!Number.isFinite(pct)) return;
+
+  const levelsRaw = Array.isArray(cfg.levels) && cfg.levels.length ? cfg.levels : [30, 15, 5];
+  const levels = levelsRaw
+    .map(v => parseInt(v, 10))
+    .filter(n => Number.isFinite(n) && n > 0 && n <= 100)
+    .sort((a, b) => b - a);
+  if (!levels.length) return;
+
+  const highest = levels[0];
+
+  // If battery went above highest threshold, reset lastNotifiedLevel
+  if (pct > highest && cfg.lastNotifiedLevel !== null) {
+    cfg.lastNotifiedLevel = null;
+    saveDB();
+    return;
+  }
+
+  for (const lvl of levels) {
+    if (pct <= lvl) {
+      if (cfg.lastNotifiedLevel !== lvl) {
+        // Fire notification and update lastNotifiedLevel
+        sendBatteryAlert(lvl, pct)
+          .then(() => {
+            cfg.lastNotifiedLevel = lvl;
+            saveDB();
+          })
+          .catch(err => {
+            console.error("Battery alert error:", err);
+          });
+      }
+      break;
+    }
+  }
+}
+
+function pollHostInfoOnce() {
+  return new Promise((resolve) => {
+    exec(`${INFO_SCRIPT}`, { shell: SHELL_BIN, timeout: 4000 }, (err, stdout) => {
+      if (err) {
+        hostInfo.ok = false;
+        hostInfo.lastError = String(err.message || err);
+        hostInfo.updatedAt = new Date().toISOString();
+        return resolve(false);
+      }
+      const parsed = parseInfoOutput(stdout || "");
+      hostInfo = {
+        ...hostInfo,
+        ...parsed,
+        ok: true,
+        lastError: null,
+        updatedAt: new Date().toISOString()
+      };
+
+      // After host info is updated, check battery alerts
+      try {
+        checkBatteryAlerts();
+      } catch (e) {
+        console.error("checkBatteryAlerts error:", e);
+      }
+
+      resolve(true);
+    });
+  });
+}
+
+// initial poll + interval
+pollHostInfoOnce().catch(() => {});
+setInterval(() => {
+  pollHostInfoOnce().catch(() => {});
+}, 60_000);
+
+// public read-only endpoint
+app.get("/api/hostinfo", (req, res) => {
+  res.json(hostInfo);
+});
+
+// -----------------------
+// Battery alerts config endpoints (admin)
+// -----------------------
+app.get("/api/battery-alerts", requireAdmin, (req, res) => {
+  const cfg = getBatteryAlertsConfig();
+  res.json({
+    enabled: !!cfg.enabled,
+    levels: Array.isArray(cfg.levels) ? cfg.levels : [30, 15, 5],
+    telegramBotToken: cfg.telegramBotToken || "",
+    telegramChatId: cfg.telegramChatId || ""
+  });
+});
+
+app.put("/api/battery-alerts", requireAdmin, (req, res) => {
+  const cfg = getBatteryAlertsConfig();
+  const { enabled, levels, telegramBotToken, telegramChatId } = req.body || {};
+
+  if (typeof enabled === "boolean") {
+    cfg.enabled = enabled;
+  }
+
+  if (Array.isArray(levels)) {
+    const norm = levels
+      .map(v => parseInt(v, 10))
+      .filter(n => Number.isFinite(n) && n > 0 && n <= 100);
+    if (norm.length) {
+      norm.sort((a, b) => b - a);
+      cfg.levels = norm;
+    }
+  }
+
+  if (typeof telegramBotToken === "string") {
+    cfg.telegramBotToken = telegramBotToken.trim();
+  }
+  if (typeof telegramChatId === "string") {
+    cfg.telegramChatId = telegramChatId.trim();
+  }
+
+  saveDB();
+
+  res.json({
+    ok: true,
+    config: {
+      enabled: cfg.enabled,
+      levels: cfg.levels
+    }
+  });
+});
+
+// -----------------------
 // Auth endpoints
 // -----------------------
-
-// POST /api/login  {password}
-// Sets adminToken cookie if password is correct
 app.post("/api/login", (req, res) => {
   const { password } = req.body || {};
   if (password !== ADMIN_PASSWORD) {
@@ -357,9 +681,6 @@ app.post("/api/login", (req, res) => {
 
   const token = createSession();
 
-  // Set HttpOnly cookie. SameSite=Strict blocks CSRF from other sites.
-  // secure:false so it also works over plain HTTP in LAN. In production
-  // behind HTTPS you SHOULD set secure:true.
   res.cookie("adminToken", token, {
     httpOnly: true,
     sameSite: "strict",
@@ -370,8 +691,6 @@ app.post("/api/login", (req, res) => {
   return res.json({ ok: true });
 });
 
-// POST /api/logout
-// Clears the session cookie and deletes server-side session
 app.post("/api/logout", (req, res) => {
   const token = req.cookies.adminToken;
   if (token) {
@@ -395,10 +714,22 @@ app.get("/api/state", (req, res) => {
 });
 
 // -----------------------
-// SERVICES CRUD (protected)
+// Manual refresh endpoint
 // -----------------------
+app.post("/api/refresh", async (req, res) => {
+  try {
+    await healthCheckAll();
+    await pollHostInfoOnce();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("refresh error:", e);
+    res.status(500).json({ ok: false, error: "refresh_failed" });
+  }
+});
 
-// Create service
+// -----------------------
+// SERVICES CRUD
+// -----------------------
 app.post("/api/service", requireAdmin, (req, res) => {
   const { name, openUrl, checkUrl, method, notes } = req.body || {};
   if (!name || !openUrl || !checkUrl) {
@@ -423,7 +754,6 @@ app.post("/api/service", requireAdmin, (req, res) => {
   res.json(newSvc);
 });
 
-// Update service
 app.put("/api/service/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const svc = db.services.find(s => s.id === id);
@@ -442,7 +772,6 @@ app.put("/api/service/:id", requireAdmin, (req, res) => {
   res.json(svc);
 });
 
-// Delete service
 app.delete("/api/service/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   db.services = db.services.filter(s => s.id !== id);
@@ -450,7 +779,6 @@ app.delete("/api/service/:id", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// Reorder services
 app.put("/api/reorder/services", requireAdmin, (req, res) => {
   const { order } = req.body || {};
   if (!Array.isArray(order)) {
@@ -473,9 +801,8 @@ app.put("/api/reorder/services", requireAdmin, (req, res) => {
 });
 
 // -----------------------
-// LINKS CRUD (protected)
+// LINKS CRUD
 // -----------------------
-
 app.post("/api/link", requireAdmin, (req, res) => {
   const { title, url, icon, notes } = req.body || {};
   if (!title || !url) {
@@ -539,13 +866,27 @@ app.put("/api/reorder/links", requireAdmin, (req, res) => {
 });
 
 // -----------------------
-// WOL CRUD / RUN (protected)
+// WOL CRUD / RUN + SSH
 // -----------------------
-
 app.post("/api/wol", requireAdmin, (req, res) => {
-  const { name, host, user, pass, scriptId, notes } = req.body || {};
+  const { name, host, user, pass, scriptId, notes, sshActions } = req.body || {};
   if (!name || !host || !user || !pass || !scriptId) {
     return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  let normalizedSshActions = [];
+  if (Array.isArray(sshActions)) {
+    normalizedSshActions = sshActions
+      .map(a => ({
+        id: makeId("ssh"),
+        label: (a.label || "").trim(),
+        host: (a.host || host).trim(),
+        user: (a.user || "").trim(),
+        command: (a.command || "").trim(),
+        lastRun: null,
+        lastResult: "never"
+      }))
+      .filter(a => a.label && a.user && a.command);
   }
 
   const newTask = {
@@ -557,7 +898,8 @@ app.post("/api/wol", requireAdmin, (req, res) => {
     scriptId,
     notes: notes || "",
     lastRun: null,
-    lastResult: "never"
+    lastResult: "never",
+    sshActions: normalizedSshActions
   };
 
   db.wol.push(newTask);
@@ -570,13 +912,31 @@ app.put("/api/wol/:id", requireAdmin, (req, res) => {
   const task = db.wol.find(a => a.id === id);
   if (!task) return res.status(404).json({ error: "WOL task not found" });
 
-  const { name, host, user, pass, scriptId, notes } = req.body || {};
+  const { name, host, user, pass, scriptId, notes, sshActions } = req.body || {};
   if (name     !== undefined) task.name     = name;
   if (host     !== undefined) task.host     = host;
   if (user     !== undefined) task.user     = user;
   if (pass     !== undefined) task.pass     = pass;
   if (scriptId !== undefined) task.scriptId = scriptId;
   if (notes    !== undefined) task.notes    = notes;
+
+  if (sshActions !== undefined) {
+    if (Array.isArray(sshActions)) {
+      task.sshActions = sshActions
+        .map(a => ({
+          id: makeId("ssh"),
+          label: (a.label || "").trim(),
+          host: (a.host || task.host).trim(),
+          user: (a.user || "").trim(),
+          command: (a.command || "").trim(),
+          lastRun: null,
+          lastResult: "never"
+        }))
+        .filter(a => a.label && a.user && a.command);
+    } else {
+      task.sshActions = [];
+    }
+  }
 
   saveDB();
   res.json(task);
@@ -610,13 +970,78 @@ app.put("/api/reorder/wol", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// Run WOL (execute MikroTik script)
 app.post("/api/wol/:id/run", requireAdmin, async (req, res) => {
   const { id } = req.params;
   const task = db.wol.find(a => a.id === id);
   if (!task) return res.status(404).json({ error: "WOL task not found" });
 
   const result = await executeWOLTask(task);
+  res.json(result);
+});
+
+app.post("/api/wol/:id/ssh/:actionId/run", requireAdmin, async (req, res) => {
+  const { id, actionId } = req.params;
+  const task = db.wol.find(a => a.id === id);
+  if (!task) return res.status(404).json({ error: "WOL task not found" });
+
+  const actions = Array.isArray(task.sshActions) ? task.sshActions : [];
+  const action = actions.find(a => a.id === actionId);
+  if (!action) return res.status(404).json({ error: "SSH action not found" });
+
+  const result = await executeSSHAction(task, action);
+  res.json(result);
+});
+
+// -----------------------
+// Host actions CRUD / RUN
+// -----------------------
+app.post("/api/host-action", requireAdmin, (req, res) => {
+  const { label, command, notes } = req.body || {};
+  if (!label || !command) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const newAction = {
+    id: makeId("host"),
+    label: label.trim(),
+    command: command.trim(),
+    notes: (notes || "").trim(),
+    lastRun: null,
+    lastResult: "never"
+  };
+
+  db.hostActions.push(newAction);
+  saveDB();
+  res.json(newAction);
+});
+
+app.put("/api/host-action/:id", requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const action = db.hostActions.find(a => a.id === id);
+  if (!action) return res.status(404).json({ error: "Host action not found" });
+
+  const { label, command, notes } = req.body || {};
+  if (label   !== undefined) action.label   = String(label).trim();
+  if (command !== undefined) action.command = String(command).trim();
+  if (notes   !== undefined) action.notes   = String(notes).trim();
+
+  saveDB();
+  res.json(action);
+});
+
+app.delete("/api/host-action/:id", requireAdmin, (req, res) => {
+  const { id } = req.params;
+  db.hostActions = db.hostActions.filter(a => a.id !== id);
+  saveDB();
+  res.json({ ok: true });
+});
+
+app.post("/api/host-action/:id/run", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const action = db.hostActions.find(a => a.id === id);
+  if (!action) return res.status(404).json({ error: "Host action not found" });
+
+  const result = await executeHostAction(action);
   res.json(result);
 });
 
@@ -627,16 +1052,14 @@ const PORT = 4000;
 
 loadDB();
 
-// initial health probe
 healthCheckAll().catch(err => {
   console.error("initial healthCheckAll error:", err);
 });
 
 app.listen(PORT, () => {
-  console.log("Wadboard API running on port " + PORT);
+  console.log("WADPH Dashboard API running on port " + PORT);
 });
 
-// periodic health checks
 setInterval(() => {
   healthCheckAll().catch(err => {
     console.error("interval healthCheckAll error:", err);
