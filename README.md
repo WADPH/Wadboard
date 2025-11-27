@@ -1,6 +1,7 @@
 # Wadboard — Your own simple dashboard 
 
-<img width="1084" height="989" alt="image" src="https://github.com/user-attachments/assets/cff53d89-af31-4b11-a705-76aa5bfa00bb" />
+<img width="967" height="1003" alt="image" src="https://github.com/user-attachments/assets/eb055ea7-3c05-4442-a678-cdc8c4bd7f88" />
+
 
 ## Requirements
 
