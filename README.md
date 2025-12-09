@@ -46,7 +46,7 @@
    ```bash
    setsid node server.js
    ```
-   <br>or
+   or
    ```bash
    setsid node server.js >> /path/to/log_file.log 2>&1 < /dev/null &
    ```
