@@ -52,6 +52,34 @@
    ```
 
 
+## Nginx Template
+
+nginx.conf
+```bash
+
+    # Wadboard (frontend + API proxy)
+    server {
+        listen 8001;
+        server_name wadph.top;
+        root /path/to/wadboard/frontend;
+        index index.html;
+
+        # frontend
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+    # keep /api prefix
+    location ^~ /api/ {
+        proxy_pass http://127.0.0.1:4000/api/;  # note the trailing /api/
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+
+```
+
 ## Project/Repo Structure <br>
 
 ```bash
