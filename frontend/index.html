@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,6 +45,11 @@
     --accent-bg: linear-gradient(135deg,#7c3aed 0%,#06b6d4 100%);
     --accent-text: #ffffff;
     --chip-shadow: 0 6px 20px rgba(124,58,237,0.25);
+
+
+    --scrollbar-track: #171923;
+    --scrollbar-thumb: #3a3f6b;
+    --scrollbar-thumb-hover: #4f55a8;
   }
 
   :root[data-theme="light"] {
@@ -64,6 +70,11 @@
     --accent-bg: linear-gradient(135deg,#4f46e5 0%,#0ea5e9 100%);
     --accent-text: #ffffff;
     --chip-shadow: 0 6px 20px rgba(79,70,229,0.25);
+
+
+    --scrollbar-track: #eef1ff;
+    --scrollbar-thumb: #b5bcff;
+    --scrollbar-thumb-hover: #7c84ff;
   }
 
   * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
@@ -267,17 +278,33 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     display: flex; align-items: center; justify-content: center; z-index: 9999;
   }
-  .modal {
-    width: min(92vw, 520px);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-2xl);
-    box-shadow: var(--shadow-card);
-    padding: 1rem 1.25rem 1.25rem;
-    display: flex; flex-direction: column; gap: 1rem;
-  }
+.modal {
+  width: min(92vw, 520px);
+  max-height: calc(100vh - 2rem);   /* ключевая строка */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-card);
+  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;                 /* важно */
+}
+
   .modal-top { display: flex; justify-content: space-between; gap: .75rem; align-items: center; }
-  .tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.modal-body {
+  overflow-y: auto;
+  flex: 1 1 auto;        /* занимает всё доступное место */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-right: 0.25rem;
+}
+
+
+ .tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
   .tab {
     cursor: pointer; background-image: var(--accent-bg); color: var(--accent-text);
     border: 0; border-radius: var(--radius-xl); padding: .5rem .75rem; font-weight: 800; font-size: .72rem;
@@ -409,6 +436,35 @@
   .ssh-row .btn {
     flex: 0 0 auto;
   }
+
+
+
+
+
+
+/* ===== Custom scrollbar (modal only) ===== */
+.modal-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 10px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+
+
+
   </style>
 </head>
 <body>
@@ -494,6 +550,8 @@
       <button class="close" id="modal-close">Close</button>
     </div>
 
+    <div class="modal-body">
+
     <!-- SERVICE FORM -->
     <form class="form" id="form-service">
       <h3 id="svc-form-title">Add Service</h3>
@@ -551,44 +609,103 @@
       <button class="btn submit" type="submit" id="lnk-submit">Create Link</button>
     </form>
 
-    <!-- WOL FORM -->
-    <form class="form hidden" id="form-wol">
-      <h3 id="wol-form-title">Add WOL</h3>
-      <div class="field">
-        <label class="label">Name</label>
-        <input class="input" id="wol-name" placeholder="Wake SERVER" required />
-      </div>
-      <div class="field">
-        <label class="label">MikroTik Host/IP</label>
-        <input class="input" id="wol-host" placeholder="192.168.101.1" required />
-      </div>
-      <div class="field">
-        <label class="label">MikroTik User</label>
-        <input class="input" id="wol-user" placeholder="admin" required />
-      </div>
-      <div class="field">
-        <label class="label">MikroTik Password</label>
-        <input class="input" id="wol-pass" type="password" placeholder="********" required />
-      </div>
-      <div class="field">
-        <label class="label">MikroTik Script ID</label>
-        <input class="input" id="wol-script" placeholder="1" required />
-      </div>
-      <div class="field">
-        <label class="label">Notes</label>
-        <textarea class="textarea" id="wol-notes" placeholder="What this does"></textarea>
-      </div>
+<!-- WOL FORM -->
+<form class="form hidden" id="form-wol">
+  <h3 id="wol-form-title">Add WOL</h3>
 
-      <div class="field">
-        <label class="label">SSH Actions (optional)</label>
-        <div class="ssh-section">
-          <div id="wol-ssh-list"></div>
-          <button class="btn" type="button" id="wol-ssh-add">+ Add SSH Action</button>
-        </div>
-      </div>
+  <!-- WOL TYPE -->
+  <div class="field">
+    <label class="label">WOL Type</label>
+    <select class="input" id="wol-type">
+      <option value="basic">Basic (wol command)</option>
+      <option value="mikrotik">MikroTik</option>
+      <option value="wadesp">WadESP-PowerSW</option>
+    </select>
+  </div>
 
-      <button class="btn submit" type="submit" id="wol-submit">Create WOL</button>
-    </form>
+  <!-- COMMON -->
+  <div class="field">
+    <label class="label">Name</label>
+    <input class="input" id="wol-name" placeholder="Wake SERVER" required />
+  </div>
+
+  <!-- BASIC WOL -->
+  <div id="wol-basic">
+    <div class="field">
+      <label class="label">MAC address</label>
+      <input class="input" id="wol-mac" placeholder="AA:BB:CC:DD:EE:FF">
+    </div>
+
+    <div class="field">
+      <label class="label">Broadcast IP</label>
+      <input class="input" id="wol-broadcast" placeholder="192.168.1.255">
+    </div>
+
+    <div class="field">
+      <label class="label">UDP port</label>
+      <input class="input" id="wol-port" placeholder="9">
+    </div>
+
+    <div class="field">
+      <label class="label">SecureON password (optional)</label>
+      <input class="input" id="wol-secureon" placeholder="AA-BB-CC-DD-EE-FF">
+    </div>
+  </div>
+
+  <!-- MIKROTIK (AS IS) -->
+  <div id="wol-mikrotik" class="hidden">
+    <div class="field">
+      <label class="label">MikroTik Host/IP</label>
+      <input class="input" id="wol-host" placeholder="192.168.101.1" />
+    </div>
+
+    <div class="field">
+      <label class="label">MikroTik User</label>
+      <input class="input" id="wol-user" placeholder="admin" />
+    </div>
+
+    <div class="field">
+      <label class="label">MikroTik Password</label>
+      <input class="input" id="wol-pass" type="password" placeholder="********" />
+    </div>
+
+    <div class="field">
+      <label class="label">MikroTik Script ID</label>
+      <input class="input" id="wol-script" placeholder="1" />
+    </div>
+  </div>
+
+  <!-- WADESP -->
+<div id="wol-wadesp" class="hidden">
+  <div class="field">
+    <label class="label">ESP Host / IP</label>
+    <input class="input" id="wol-esp-host" placeholder="192.168.1.50">
+  </div>
+
+  <div style="font-size:.75rem;color:var(--text-dim)">
+    HTTP POST → /power/on
+  </div>
+</div>
+
+
+  <!-- NOTES -->
+  <div class="field">
+    <label class="label">Notes</label>
+    <textarea class="textarea" id="wol-notes"></textarea>
+  </div>
+
+  <!-- SSH ACTIONS (ONLY FOR MIKROTIK, логика не трогаем) -->
+  <div class="field" id="wol-ssh-section">
+    <label class="label">SSH Actions (optional)</label>
+    <div class="ssh-section">
+      <div id="wol-ssh-list"></div>
+      <button class="btn" type="button" id="wol-ssh-add">+ Add SSH Action</button>
+    </div>
+  </div>
+
+  <button class="btn submit" type="submit" id="wol-submit">Create WOL</button>
+</form>
+
 
     <!-- HOST ACTION FORM -->
     <form class="form hidden" id="form-host">
@@ -612,6 +729,7 @@
       <button class="btn submit" type="submit" id="host-submit">Create Command</button>
     </form>
   </div>
+</div>
 </div>
 
 <!-- Admin password modal (one-shot protected actions) -->
@@ -644,6 +762,8 @@
       <button class="close" id="settings-close">Close</button>
     </div>
 
+<div class="modal-body">
+
     <div class="form">
       <h3 style="margin-top:0;">Admin session</h3>
       <p id="settings-session-text" style="margin:0 0 .75rem; font-size:.8rem; color:var(--text-dim);"></p>
@@ -658,6 +778,31 @@
         <button class="btn btn-danger" type="button" id="settings-logout-btn">Log out</button>
       </div>
     </div>
+
+
+<div id="settings-admin-only" class="hidden">
+<div class="form" style="margin-top:1rem;">
+  <h3 style="margin-top:0;">Change admin password</h3>
+
+  <div class="field">
+    <label class="label">Current password</label>
+    <input class="input" id="pwd-old" type="password" placeholder="********">
+  </div>
+
+  <div class="field">
+    <label class="label">New password</label>
+    <input class="input" id="pwd-new" type="password" placeholder="Min 6 characters">
+  </div>
+
+  <button class="btn submit" type="button" id="pwd-save-btn">
+    Change password
+  </button>
+
+  <div id="pwd-save-status"
+       style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)">
+  </div>
+</div>
+
 
     <div class="form" style="margin-top:1rem;">
       <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
@@ -695,7 +840,8 @@
     </div>
   </div>
 </div>
-
+</div>
+</div>
 <script>
   // ==============================
   // CONFIG
@@ -931,38 +1077,54 @@
     });
   }
 
-  function updateBatteryFormDisabled() {
-    const disabled = !editMode;
-    const inputs = [
-      batteryEnabledInput,
-      batteryLevelsInput,
-      batteryBotTokenInput,
-      batteryChatIdInput,
-      batterySaveBtn
-    ];
-    inputs.forEach(el => {
-      if (!el) return;
-      el.disabled = disabled;
-    });
+
+function syncSettingsUI() {
+  const adminOnlyBox = document.getElementById("settings-admin-only");
+
+  if (editMode) {
+    settingsSessionText.textContent =
+      "Edit mode is enabled for this browser session.";
+    settingsLoginForm.classList.add("hidden");
+    settingsLogoutRow.classList.remove("hidden");
+    adminOnlyBox.classList.remove("hidden");
+  } else {
+    settingsSessionText.textContent =
+      "Enter admin password to enable editing and configure additional features.";
+    settingsLoginForm.classList.remove("hidden");
+    settingsLogoutRow.classList.add("hidden");
+    adminOnlyBox.classList.add("hidden");
   }
+}
+
+
 
   function forceLogoutUI() {
     editMode = false;
     pendingAction = null;
     openBtn.classList.add("hidden");
-    updateBatteryFormDisabled();
-    if (settingsOverlay) {
-      settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
-      settingsLoginForm.classList.remove("hidden");
-      settingsLogoutRow.classList.add("hidden");
-    }
     render();
   }
 
   // ==============================
   // SETTINGS MODAL (edit mode + battery alerts)
   // ==============================
-  async function loadBatteryConfigIntoForm() {
+
+async function changeAdminPassword(oldPw, newPw) {
+  const res = await apiJSON("PUT", "/admin/password", {
+    oldPassword: oldPw,
+    newPassword: newPw
+  });
+
+  if (res && res.ok) {
+    alert("Password changed");
+  } else {
+    alert("Password change failed");
+  }
+}
+
+
+
+ async function loadBatteryConfigIntoForm() {
     if (!batteryEnabledInput) return;
     const cfg = await apiGET("/battery-alerts");
     if (!cfg) return;
@@ -981,12 +1143,13 @@
   function openSettingsModal() {
     if (!settingsOverlay) return;
     settingsOverlay.classList.remove("hidden");
+    const adminOnlyBox = document.getElementById("settings-admin-only");
 
     if (editMode) {
       settingsSessionText.textContent = "Edit mode is enabled for this browser session.";
       settingsLoginForm.classList.add("hidden");
       settingsLogoutRow.classList.remove("hidden");
-      updateBatteryFormDisabled();
+      adminOnlyBox.classList.remove("hidden");
       loadBatteryConfigIntoForm();
     } else {
       settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
@@ -994,7 +1157,7 @@
       settingsLogoutRow.classList.add("hidden");
       settingsPassInput.value = "";
       settingsPassInput.focus();
-      updateBatteryFormDisabled();
+      adminOnlyBox.classList.add("hidden");
     }
   }
 
@@ -1025,8 +1188,10 @@
       settingsLoginForm.classList.add("hidden");
       settingsLogoutRow.classList.remove("hidden");
 
+      syncSettingsUI();
+
       await loadStateFromServer();
-      updateBatteryFormDisabled();
+      // updateBatteryFormDisabled();
       await loadBatteryConfigIntoForm();
     } else {
       settingsPassInput.value = "";
@@ -1035,8 +1200,10 @@
   });
 
   settingsLogoutBtn.addEventListener("click", async () => {
-    await logoutRequest();
-    forceLogoutUI();
+     await logoutRequest();
+     editMode = false;
+     forceLogoutUI();
+     syncSettingsUI();
   });
 
   batterySaveBtn.addEventListener("click", async () => {
@@ -1135,6 +1302,7 @@
     document.getElementById("wol-pass").value   = "";
     document.getElementById("wol-script").value = "";
     document.getElementById("wol-notes").value  = "";
+    document.getElementById("wol-esp-host").value  = "";
     clearWolSshForm();
   }
 
@@ -1307,6 +1475,10 @@
           document.getElementById("wol-pass").value   = task.pass     || "";
           document.getElementById("wol-script").value = task.scriptId || "";
           document.getElementById("wol-notes").value  = task.notes    || "";
+          if (task.type === "wadesp") {
+            document.getElementById("wol-esp-host").value  = task.espHost  || "";
+            document.getElementById("wol-esp-token").value = task.espToken || "";
+          }
           clearWolSshForm();
           if (Array.isArray(task.sshActions)) {
             task.sshActions.forEach(a => {
@@ -1395,30 +1567,55 @@
     await loadStateFromServer();
   });
 
-  formWol.addEventListener("submit", async e => {
-    e.preventDefault();
-    if (!editMode) return;
 
-    const body = {
-      name:     document.getElementById("wol-name").value.trim(),
-      host:     document.getElementById("wol-host").value.trim(),
-      user:     document.getElementById("wol-user").value.trim(),
-      pass:     document.getElementById("wol-pass").value.trim(),
-      scriptId: document.getElementById("wol-script").value.trim(),
-      notes:    document.getElementById("wol-notes").value.trim(),
-      sshActions: collectWolSshActions()
-    };
-    if (!body.name || !body.host || !body.user || !body.pass || !body.scriptId) return;
+formWol.addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!editMode) return;
 
-    if (mode.action === "edit" && mode.id) {
-      await apiJSON("PUT", "/wol/" + mode.id, body);
-    } else {
-      await apiJSON("POST", "/wol", body);
-    }
+  body.sshActions = collectWolSshActions();
+  const type = document.getElementById("wol-type").value;
 
-    hideModal();
-    await loadStateFromServer();
-  });
+  let body = {
+    name:  document.getElementById("wol-name").value.trim(),
+    type,
+    notes: document.getElementById("wol-notes").value.trim()
+  };
+
+  if (type === "basic") {
+    body.mac       = document.getElementById("wol-mac").value.trim();
+    body.broadcast = document.getElementById("wol-broadcast").value.trim();
+    body.port      = document.getElementById("wol-port").value.trim();
+    body.secureon  = document.getElementById("wol-secureon").value.trim();
+    if (!body.mac) return;
+  }
+
+  if (type === "mikrotik") {
+    body.host       = document.getElementById("wol-host").value.trim();
+    body.user       = document.getElementById("wol-user").value.trim();
+    body.pass       = document.getElementById("wol-pass").value.trim();
+    body.scriptId   = document.getElementById("wol-script").value.trim();
+    if (!body.host || !body.user || !body.pass || !body.scriptId) return;
+  }
+
+
+if (type === "wadesp") {
+  body.espHost = document.getElementById("wol-esp-host").value.trim();
+  if (!body.espHost) return;
+}
+
+
+if (mode.action === "edit" && mode.id) {
+  body.type = type; // ОБЯЗАТЕЛЬНО
+  await apiJSON("PUT", "/wol/" + mode.id, body);
+} else {
+  await apiJSON("POST", "/wol", body);
+}
+
+  hideModal();
+  await loadStateFromServer();
+});
+
+
 
   formHost.addEventListener("submit", async e => {
     e.preventDefault();
@@ -2011,7 +2208,16 @@
   // ==============================
   (async function init() {
     openBtn.classList.add("hidden");
-    updateBatteryFormDisabled();
+    // updateBatteryFormDisabled();
+
+
+const adminStatus = await fetch("/api/admin/status").then(r => r.json());
+
+if (!adminStatus.initialized) {
+  adminOverlay.classList.remove("hidden");
+  adminPassInput.placeholder = "Set admin password";
+}
+
 
     await loadStateFromServer();
     await loadHostInfo();
@@ -2019,6 +2225,78 @@
     setInterval(refreshLoop, 10000);
     setInterval(loadHostInfo, 60000);
   })();
+
+
+
+
+
+// ==============================
+// WOL TYPE SWITCH
+// ==============================
+const wolTypeSelect = document.getElementById("wol-type");
+const wolBasicBox   = document.getElementById("wol-basic");
+const wolMikrotikBox= document.getElementById("wol-mikrotik");
+const wolWadEspBox  = document.getElementById("wol-wadesp");
+const wolSshSection = document.getElementById("wol-ssh-section");
+
+function updateWolTypeUI() {
+  const t = wolTypeSelect.value;
+
+  wolBasicBox.classList.add("hidden");
+  wolMikrotikBox.classList.add("hidden");
+  wolWadEspBox.classList.add("hidden");
+
+  if (t === "basic") {
+    wolBasicBox.classList.remove("hidden");
+  }
+
+  if (t === "mikrotik") {
+    wolMikrotikBox.classList.remove("hidden");
+  }
+
+  if (t === "wadesp") {
+    wolWadEspBox.classList.remove("hidden");
+  }
+}
+
+
+wolTypeSelect.addEventListener("change", updateWolTypeUI);
+updateWolTypeUI();
+
+
+const pwdOldInput   = document.getElementById("pwd-old");
+const pwdNewInput   = document.getElementById("pwd-new");
+const pwdSaveBtn    = document.getElementById("pwd-save-btn");
+const pwdSaveStatus = document.getElementById("pwd-save-status");
+
+pwdSaveBtn.addEventListener("click", async () => {
+  if (!editMode) return;
+
+  const oldPw = pwdOldInput.value.trim();
+  const newPw = pwdNewInput.value.trim();
+
+  if (!newPw || newPw.length < 6) {
+    pwdSaveStatus.textContent = "Password too short";
+    return;
+  }
+
+  pwdSaveStatus.textContent = "Saving...";
+
+  const res = await apiJSON("PUT", "/admin/password", {
+    oldPassword: oldPw,
+    newPassword: newPw
+  });
+
+  if (res && res.ok) {
+    pwdSaveStatus.textContent = "Password changed";
+    pwdOldInput.value = "";
+    pwdNewInput.value = "";
+  } else {
+    pwdSaveStatus.textContent = "Wrong current password";
+  }
+});
+
+
 </script>
 </body>
 </html>
