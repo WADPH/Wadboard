@@ -11,11 +11,18 @@
 //     { id, title, url, icon, notes }
 //   ],
 //   wol: [
-//     { id, name, host, user, pass, scriptId, notes,
+//     {
+//       id, name, type, notes,
+//       // type = "mikrotik" | "basic" | "wadesp"
+//
+//       // mikrotik
+//       host, user, pass, scriptId,
+//
+//       // basic
+//       mac, broadcast, port, secureon,
+//
 //       lastRun, lastResult,
-//       sshActions: [
-//         { id, label, host, user, command, lastRun, lastResult }
-//       ]
+//       sshActions: [ ... ]
 //     }
 //   ],
 //   hostActions: [
@@ -49,11 +56,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const DATA_FILE = path.join(__dirname, "wadph-data.json");
-
-// -----------------------
-// Admin password (change this)
-// -----------------------
-const ADMIN_PASSWORD = "wadboard";
 
 // -----------------------
 // Session store (in-memory)
@@ -109,8 +111,28 @@ let db = {
   hostActions: [],
   config: {
     batteryAlerts: defaultBatteryAlertsConfig()
+  },
+  admin: {
+    passwordHash: null, // <-- ВАЖНО
+    initialized: false
   }
 };
+
+
+
+
+function hashPassword(password) {
+  return crypto
+    .createHash("sha256")
+    .update(password)
+    .digest("hex");
+}
+
+function checkPassword(password) {
+  if (!db.admin.initialized || !db.admin.passwordHash) return false;
+  return hashPassword(password) === db.admin.passwordHash;
+}
+
 
 function makeId(prefix) {
   return prefix + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
@@ -130,6 +152,13 @@ function ensureConfigStructure() {
     if (typeof cfg.telegramChatId !== "string") cfg.telegramChatId = "";
     if (!("lastNotifiedLevel" in cfg)) cfg.lastNotifiedLevel = null;
   }
+
+if (!db.admin || typeof db.admin !== "object") {
+  db.admin = { passwordHash: null, initialized: false };
+}
+if (db.admin.initialized === undefined) db.admin.initialized = false;
+if (db.admin.passwordHash === undefined) db.admin.passwordHash = null;
+
 }
 
 function getBatteryAlertsConfig() {
@@ -156,21 +185,30 @@ function loadDB() {
       if (lnk.icon === undefined)  lnk.icon = "🔗";
     });
 
-    db.wol = Array.isArray(db.wol) ? db.wol : [];
-    db.wol.forEach(task => {
-      if (task.notes === undefined)      task.notes = "";
-      if (task.lastRun === undefined)    task.lastRun = null;
-      if (task.lastResult === undefined) task.lastResult = "never";
 
-      if (!Array.isArray(task.sshActions)) {
-        task.sshActions = [];
-      }
-      task.sshActions.forEach(a => {
-        if (!a.id) a.id = makeId("ssh");
-        if (a.lastRun === undefined) a.lastRun = null;
-        if (a.lastResult === undefined) a.lastResult = "never";
-      });
-    });
+db.wol.forEach(task => {
+  if (!task.type) task.type = "mikrotik";
+
+  if (task.notes === undefined)      task.notes = "";
+  if (task.lastRun === undefined)    task.lastRun = null;
+  if (task.lastResult === undefined) task.lastResult = "never";
+
+  if (task.type === "wadesp") {
+    if (task.espHost === undefined) task.espHost = "";
+    if (task.espToken === undefined) task.espToken = "";
+  }
+
+
+  if (!Array.isArray(task.sshActions)) {
+    task.sshActions = [];
+  }
+  task.sshActions.forEach(a => {
+    if (!a.id) a.id = makeId("ssh");
+    if (a.lastRun === undefined) a.lastRun = null;
+    if (a.lastResult === undefined) a.lastResult = "never";
+  });
+});
+
 
     db.hostActions = Array.isArray(db.hostActions) ? db.hostActions : [];
     db.hostActions.forEach(a => {
@@ -297,9 +335,99 @@ async function healthCheckAll() {
 }
 
 // -----------------------
-// WOL execution (MikroTik)
+// WOL execution (MikroTik, Basic, PowerSW)
 // -----------------------
+
+function executeBasicWOL(task) {
+  return new Promise(resolve => {
+    const mac = (task.mac || "").trim();
+    if (!mac) {
+      task.lastRun = new Date().toISOString();
+      task.lastResult = "invalid_mac";
+      saveDB();
+      return resolve({ ok: false, result: "invalid_mac" });
+    }
+
+    const args = [];
+    if (task.broadcast) args.push("-i", task.broadcast);
+    if (task.port)      args.push("-p", String(task.port));
+    if (task.secureon)  args.push("--passwd", task.secureon);
+
+    args.push(mac);
+
+    const cmd = `wol ${args.join(" ")}`;
+
+    exec(cmd, { timeout: 3000 }, (error) => {
+      let okFlag, result;
+      if (error) {
+        okFlag = false;
+        result = "error";
+      } else {
+        okFlag = true;
+        result = "ok";
+      }
+
+      task.lastRun = new Date().toISOString();
+      task.lastResult = result;
+      saveDB();
+      resolve({ ok: okFlag, result });
+    });
+  });
+}
+
+
+async function executeWadEspPower(task) {
+  const host = (task.espHost || "").trim();
+  if (!host) {
+    task.lastRun = new Date().toISOString();
+    task.lastResult = "invalid_esp_host";
+    saveDB();
+    return { ok: false, result: "invalid_esp_host" };
+  }
+
+  const url = `http://${host}/power/on`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      task.lastRun = new Date().toISOString();
+      task.lastResult = "http_" + res.status;
+      saveDB();
+      return { ok: false, result: "http_" + res.status };
+    }
+
+    task.lastRun = new Date().toISOString();
+    task.lastResult = "ok";
+    saveDB();
+    return { ok: true, result: "ok" };
+  } catch (e) {
+    task.lastRun = new Date().toISOString();
+    task.lastResult = "error";
+    saveDB();
+    return { ok: false, result: "error" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
 async function executeWOLTask(task) {
+  if (task.type === "basic") {
+    return executeBasicWOL(task);
+  }
+
+  if (task.type === "wadesp") {
+    return executeWadEspPower(task);
+  }
+
+  // default: mikrotik
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
 
@@ -332,12 +460,15 @@ async function executeWOLTask(task) {
     clearTimeout(timer);
   }
 
-  task.lastRun    = new Date().toISOString();
+  task.lastRun = new Date().toISOString();
   task.lastResult = result;
   saveDB();
 
   return { ok: okFlag, result };
 }
+
+
+
 
 // -----------------------
 // SSH execution (generic)
@@ -428,20 +559,21 @@ function sanitizeForClient(isAdmin) {
     services: db.services.map(s => ({ ...s })),
     links: db.links.map(l => ({ ...l })),
     wol: db.wol.map(w => ({
-      id:         w.id,
-      name:       w.name,
-      notes:      w.notes || "",
-      lastRun:    w.lastRun || null,
-      lastResult: w.lastResult || "never",
-      sshActions: Array.isArray(w.sshActions)
-        ? w.sshActions.map(a => ({
-            id: a.id,
-            label: a.label,
-            lastRun: a.lastRun || null,
-            lastResult: a.lastResult || "never"
-          }))
-        : []
-    })),
+  id: w.id,
+  name: w.name,
+  type: w.type,
+  notes: w.notes || "",
+  lastRun: w.lastRun || null,
+  lastResult: w.lastResult || "never",
+  sshActions: Array.isArray(w.sshActions)
+    ? w.sshActions.map(a => ({
+        id: a.id,
+        label: a.label,
+        lastRun: a.lastRun || null,
+        lastResult: a.lastResult || "never"
+      }))
+    : []
+})),
     hostActions: Array.isArray(db.hostActions)
       ? db.hostActions.map(a => ({
           id: a.id,
@@ -675,9 +807,22 @@ app.put("/api/battery-alerts", requireAdmin, (req, res) => {
 // -----------------------
 app.post("/api/login", (req, res) => {
   const { password } = req.body || {};
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "bad password" });
+// first-time setup
+if (!db.admin.initialized) {
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: "password_too_short" });
   }
+
+  db.admin.passwordHash = hashPassword(password);
+  db.admin.initialized = true;
+  saveDB();
+} else {
+  if (!checkPassword(password)) {
+    return res.status(401).json({ error: "bad_password" });
+  }
+}
+
+
 
   const token = createSession();
 
@@ -690,6 +835,34 @@ app.post("/api/login", (req, res) => {
 
   return res.json({ ok: true });
 });
+
+
+
+app.put("/api/admin/password", requireAdmin, (req, res) => {
+  const { oldPassword, newPassword } = req.body || {};
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: "password_too_short" });
+  }
+
+  if (!checkPassword(oldPassword)) {
+    return res.status(401).json({ error: "bad_password" });
+  }
+
+  db.admin.passwordHash = hashPassword(newPassword);
+  saveDB();
+
+  res.json({ ok: true });
+});
+
+
+app.get("/api/admin/status", (req, res) => {
+  res.json({
+    initialized: !!db.admin.initialized
+  });
+});
+
+
 
 app.post("/api/logout", (req, res) => {
   const token = req.cookies.adminToken;
@@ -868,19 +1041,23 @@ app.put("/api/reorder/links", requireAdmin, (req, res) => {
 // -----------------------
 // WOL CRUD / RUN + SSH
 // -----------------------
+
 app.post("/api/wol", requireAdmin, (req, res) => {
-  const { name, host, user, pass, scriptId, notes, sshActions } = req.body || {};
-  if (!name || !host || !user || !pass || !scriptId) {
+  const { name, type, notes, sshActions } = req.body || {};
+  if (!name || !type) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
+  // -----------------------
+  // Normalize SSH actions (UNIVERSAL)
+  // -----------------------
   let normalizedSshActions = [];
   if (Array.isArray(sshActions)) {
     normalizedSshActions = sshActions
       .map(a => ({
         id: makeId("ssh"),
         label: (a.label || "").trim(),
-        host: (a.host || host).trim(),
+        host: (a.host || "").trim(),
         user: (a.user || "").trim(),
         command: (a.command || "").trim(),
         lastRun: null,
@@ -889,30 +1066,107 @@ app.post("/api/wol", requireAdmin, (req, res) => {
       .filter(a => a.label && a.user && a.command);
   }
 
-  const newTask = {
+  // -----------------------
+  // Base task
+  // -----------------------
+  const task = {
     id: makeId("wol"),
     name,
-    host,
-    user,
-    pass,
-    scriptId,
+    type,
     notes: notes || "",
     lastRun: null,
     lastResult: "never",
     sshActions: normalizedSshActions
   };
 
-  db.wol.push(newTask);
+  // -----------------------
+  // MikroTik
+  // -----------------------
+  if (type === "mikrotik") {
+    const { host, user, pass, scriptId } = req.body || {};
+    if (!host || !user || !pass || !scriptId) {
+      return res.status(400).json({ error: "Missing MikroTik fields" });
+    }
+
+    task.host = host;
+    task.user = user;
+    task.pass = pass;
+    task.scriptId = scriptId;
+  }
+
+  // -----------------------
+  // Basic WOL
+  // -----------------------
+  if (type === "basic") {
+    const { mac, broadcast, port, secureon } = req.body || {};
+    if (!mac) {
+      return res.status(400).json({ error: "Missing MAC address" });
+    }
+
+    task.mac = mac;
+    task.broadcast = broadcast || "";
+    task.port = port || "";
+    task.secureon = secureon || "";
+  }
+
+  // -----------------------
+  // WadESP-PowerSW
+  // -----------------------
+if (type === "wadesp") {
+  const { espHost, espToken } = req.body || {};
+  if (!espHost) {
+    return res.status(400).json({ error: "Missing ESP host or token" });
+  }
+
+  task.espHost = espHost;
+  task.espToken = espToken;
+}
+
+  // -----------------------
+  // Save
+  // -----------------------
+  db.wol.push(task);
   saveDB();
-  res.json(newTask);
+  res.json(task);
 });
+
+
+
 
 app.put("/api/wol/:id", requireAdmin, (req, res) => {
   const { id } = req.params;
   const task = db.wol.find(a => a.id === id);
+  if (req.body.type !== undefined) task.type = req.body.type;
   if (!task) return res.status(404).json({ error: "WOL task not found" });
 
-  const { name, host, user, pass, scriptId, notes, sshActions } = req.body || {};
+  const {
+  name,
+  host,
+  user,
+  pass,
+  scriptId,
+  notes,
+  sshActions,
+  espHost,
+  mac,
+  broadcast,
+  port,
+  secureon
+} = req.body || {};
+
+if (task.type === "basic") {
+  if (mac !== undefined) task.mac = mac;
+  if (broadcast !== undefined) task.broadcast = broadcast;
+  if (port !== undefined) task.port = port;
+  if (secureon !== undefined) task.secureon = secureon;
+}
+
+if (task.type === "wadesp") {
+  if (espHost !== undefined) task.espHost = espHost;
+}
+
+
+
   if (name     !== undefined) task.name     = name;
   if (host     !== undefined) task.host     = host;
   if (user     !== undefined) task.user     = user;
