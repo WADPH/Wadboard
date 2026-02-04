@@ -314,6 +314,58 @@
       margin: 0 auto; padding: .9rem 0;
       font-size: .72rem; text-align: center;
     }
+
+    /* Toast notifications to replace browser alerts */
+    .toast-container {
+      position: fixed;
+      top: 1.25rem;
+      right: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+      z-index: 10000;
+      max-width: min(420px, 90vw);
+    }
+
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+      padding: .85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+    }
+
+    .toast.success { border-left: 4px solid #10b981; }
+    .toast.error { border-left: 4px solid #ef4444; }
+    .toast.info { border-left: 4px solid #0ea5e9; }
+
+    .toast-title { font-weight: 800; font-size: .82rem; }
+    .toast-message { font-size: .78rem; color: var(--text-mid); }
+    .toast-detail {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: .7rem;
+      color: var(--text-dim);
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      padding: .5rem .65rem;
+      border-radius: .6rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Admin error message */
+    .admin-error {
+      font-size: .75rem;
+      font-weight: 700;
+      color: #ef4444;
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: .75rem;
+      padding: .55rem .7rem;
+    }
   </style>
 </head>
 <body>
@@ -485,10 +537,14 @@
         <label class="label">Password</label>
         <input class="input" id="admin-pass" type="password" placeholder="********" required />
       </div>
+      <div class="admin-error hidden" id="admin-error"></div>
       <button class="btn submit" type="submit" id="admin-submit">Unlock</button>
     </form>
   </div>
 </div>
+
+<!-- Toast notifications -->
+<div class="toast-container" id="toast-container"></div>
 
 <script>
   // ==============================
@@ -549,6 +605,10 @@
   const adminCloseBtn  = document.getElementById("admin-close");
   const adminForm      = document.getElementById("admin-form");
   const adminPassInput = document.getElementById("admin-pass");
+  const adminErrorEl   = document.getElementById("admin-error");
+
+  // toast notifications
+  const toastContainer = document.getElementById("toast-container");
 
   // service form refs
   const svcMethodEl      = document.getElementById("svc-method");
@@ -595,6 +655,45 @@
     );
   }
 
+  // Toast notification helper (replaces default browser alert)
+  function showToast({ title, message, detail, type = "info" }) {
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "toast-title";
+    titleEl.textContent = title || "Notice";
+
+    const messageEl = document.createElement("div");
+    messageEl.className = "toast-message";
+    messageEl.textContent = message || "";
+
+    toast.appendChild(titleEl);
+    if (message) toast.appendChild(messageEl);
+
+    if (detail) {
+      const detailEl = document.createElement("div");
+      detailEl.className = "toast-detail";
+      detailEl.textContent = detail;
+      toast.appendChild(detailEl);
+    }
+
+    toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+      toast.remove();
+    }, 4500);
+  }
+
+  // Safe JSON parser for API responses
+  async function parseJsonSafe(res) {
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
+  }
+
   // Helper: send GET with cookies
   async function apiGET(path) {
     const res = await fetch(API_BASE + path, {
@@ -605,44 +704,134 @@
 
   // Helper: send JSON with cookies
   async function apiJSON(method, path, bodyObj) {
-    const res = await fetch(API_BASE + path, {
-      method,
-      credentials: "include",              // send session cookie
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(bodyObj)
-    });
+    let res;
+
+    try {
+      res = await fetch(API_BASE + path, {
+        method,
+        credentials: "include",              // send session cookie
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyObj)
+      });
+    } catch (err) {
+      showToast({
+        title: "Network error",
+        message: "Unable to reach the server.",
+        detail: err && err.message ? err.message : "",
+        type: "error"
+      });
+      return { ok: false, status: 0, error: "network_error" };
+    }
+
+    const payload = await parseJsonSafe(res);
     if (res.status === 401) {
       // session expired -> force logout mode
       forceLogoutUI();
-      return {};
+      showToast({
+        title: "Session expired",
+        message: "Please log in again to continue.",
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: "unauthorized" };
     }
-    return res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      showToast({
+        title: "Request failed",
+        message: payload.error || `HTTP ${res.status}`,
+        detail: payload.detail || payload.message,
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: payload.error || "error" };
+    }
+
+    return { ok: true, data: payload };
   }
 
   // Helper: DELETE with cookies
   async function apiDELETE(path) {
-    const res = await fetch(API_BASE + path, {
-      method: "DELETE",
-      credentials: "include"
-    });
+    let res;
+
+    try {
+      res = await fetch(API_BASE + path, {
+        method: "DELETE",
+        credentials: "include"
+      });
+    } catch (err) {
+      showToast({
+        title: "Network error",
+        message: "Unable to reach the server.",
+        detail: err && err.message ? err.message : "",
+        type: "error"
+      });
+      return { ok: false, status: 0, error: "network_error" };
+    }
+
+    const payload = await parseJsonSafe(res);
     if (res.status === 401) {
       forceLogoutUI();
-      return {};
+      showToast({
+        title: "Session expired",
+        message: "Please log in again to continue.",
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: "unauthorized" };
     }
-    return res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      showToast({
+        title: "Request failed",
+        message: payload.error || `HTTP ${res.status}`,
+        detail: payload.detail || payload.message,
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: payload.error || "error" };
+    }
+
+    return { ok: true, data: payload };
   }
 
   // POST with no body (WOL run etc)
   async function apiPOSTNoBody(path) {
-    const res = await fetch(API_BASE + path, {
-      method: "POST",
-      credentials: "include"
-    });
+    let res;
+
+    try {
+      res = await fetch(API_BASE + path, {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch (err) {
+      showToast({
+        title: "Network error",
+        message: "Unable to reach the server.",
+        detail: err && err.message ? err.message : "",
+        type: "error"
+      });
+      return { ok: false, status: 0, error: "network_error" };
+    }
+
+    const payload = await parseJsonSafe(res);
     if (res.status === 401) {
       forceLogoutUI();
-      return {};
+      showToast({
+        title: "Session expired",
+        message: "Please log in again to continue.",
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: "unauthorized" };
     }
-    return res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      showToast({
+        title: "Request failed",
+        message: payload.error || `HTTP ${res.status}`,
+        detail: payload.detail || payload.message,
+        type: "error"
+      });
+      return { ok: false, status: res.status, error: payload.error || "error" };
+    }
+
+    return { ok: true, data: payload };
   }
 
   // ==============================
@@ -654,6 +843,7 @@
     if (!editMode) {
       // locked -> ask for password
       adminPassInput.value = "";
+      adminErrorEl.classList.add("hidden");
       adminOverlay.classList.remove("hidden");
       adminPassInput.focus();
     } else {
@@ -673,6 +863,10 @@
     e.preventDefault();
     const pw = adminPassInput.value;
 
+    // clear previous error message
+    adminErrorEl.classList.add("hidden");
+    adminErrorEl.textContent = "";
+
     // call /api/login {password}
     const res = await fetch(API_BASE + "/login", {
       method: "POST",
@@ -680,6 +874,8 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: pw })
     });
+
+    const payload = await parseJsonSafe(res);
 
     if (res.status === 200) {
       // success -> turn on editMode
@@ -692,6 +888,8 @@
       render();
     } else {
       // wrong password
+      adminErrorEl.textContent = payload.error || "Invalid admin password.";
+      adminErrorEl.classList.remove("hidden");
       adminPassInput.value = "";
       adminPassInput.focus();
     }
@@ -902,9 +1100,11 @@
     if (!body.name || !body.openUrl || !body.checkUrl) return;
 
     if (mode.action === "edit" && mode.id) {
-      await apiJSON("PUT", "/service/" + mode.id, body);
+      const result = await apiJSON("PUT", "/service/" + mode.id, body);
+      if (!result.ok) return;
     } else {
-      await apiJSON("POST", "/service", body);
+      const result = await apiJSON("POST", "/service", body);
+      if (!result.ok) return;
     }
 
     hideModal();
@@ -924,9 +1124,11 @@
     if (!body.title || !body.url) return;
 
     if (mode.action === "edit" && mode.id) {
-      await apiJSON("PUT", "/link/" + mode.id, body);
+      const result = await apiJSON("PUT", "/link/" + mode.id, body);
+      if (!result.ok) return;
     } else {
-      await apiJSON("POST", "/link", body);
+      const result = await apiJSON("POST", "/link", body);
+      if (!result.ok) return;
     }
 
     hideModal();
@@ -948,9 +1150,11 @@
     if (!body.name || !body.host || !body.user || !body.pass || !body.scriptId) return;
 
     if (mode.action === "edit" && mode.id) {
-      await apiJSON("PUT", "/wol/" + mode.id, body);
+      const result = await apiJSON("PUT", "/wol/" + mode.id, body);
+      if (!result.ok) return;
     } else {
-      await apiJSON("POST", "/wol", body);
+      const result = await apiJSON("POST", "/wol", body);
+      if (!result.ok) return;
     }
 
     hideModal();
@@ -962,17 +1166,20 @@
   // ==============================
   async function deleteService(id) {
     if (!editMode) return;
-    await apiDELETE("/service/" + id);
+    const result = await apiDELETE("/service/" + id);
+    if (!result.ok) return;
     await loadStateFromServer();
   }
   async function deleteLink(id) {
     if (!editMode) return;
-    await apiDELETE("/link/" + id);
+    const result = await apiDELETE("/link/" + id);
+    if (!result.ok) return;
     await loadStateFromServer();
   }
   async function deleteWol(id) {
     if (!editMode) return;
-    await apiDELETE("/wol/" + id);
+    const result = await apiDELETE("/wol/" + id);
+    if (!result.ok) return;
     await loadStateFromServer();
   }
 
@@ -982,10 +1189,21 @@
   async function runWol(id) {
     if (!editMode) return;
     const resp = await apiPOSTNoBody("/wol/" + id + "/run");
-    if (resp && resp.ok) {
-      alert("Executed");
+    if (!resp.ok) return;
+
+    if (resp.data && resp.data.ok) {
+      showToast({
+        title: "WOL executed",
+        message: "The router script completed successfully.",
+        type: "success"
+      });
     } else {
-      alert("Error: " + (resp && resp.result ? resp.result : "unknown"));
+      showToast({
+        title: "WOL failed",
+        message: resp.data && resp.data.result ? resp.data.result : "unknown",
+        detail: resp.data && resp.data.detail ? resp.data.detail : "",
+        type: "error"
+      });
     }
     await loadStateFromServer();
   }

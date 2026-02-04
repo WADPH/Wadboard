@@ -275,6 +275,7 @@ async function executeWOLTask(task) {
 
   let result = "error";
   let okFlag = false;
+  let detail = "";
 
   try {
     const creds = Buffer.from(`${task.user}:${task.pass}`).toString("base64");
@@ -294,10 +295,13 @@ async function executeWOLTask(task) {
       okFlag = true;
       result = "ok";
     } else {
+      const bodyText = await res.text();
       result = "http_" + res.status;
+      detail = bodyText || `HTTP ${res.status}`;
     }
-  } catch {
+  } catch (err) {
     result = "error";
+    detail = err && err.message ? err.message : "Unknown error";
   } finally {
     clearTimeout(timer);
   }
@@ -306,7 +310,7 @@ async function executeWOLTask(task) {
   task.lastResult = result;
   saveDB();
 
-  return { ok: okFlag, result };
+  return { ok: okFlag, result, detail };
 }
 
 // -----------------------
