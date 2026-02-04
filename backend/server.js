@@ -22,7 +22,9 @@
 //       mac, broadcast, port, secureon,
 //
 //       lastRun, lastResult,
-//       sshActions: [ ... ]
+//       sshActions: [
+//         { id, label, host, user, pass, command, lastRun, lastResult }
+//       ]
 //     }
 //   ],
 //   hostActions: [
@@ -204,6 +206,7 @@ db.wol.forEach(task => {
   }
   task.sshActions.forEach(a => {
     if (!a.id) a.id = makeId("ssh");
+    if (a.pass === undefined) a.pass = "";
     if (a.lastRun === undefined) a.lastRun = null;
     if (a.lastResult === undefined) a.lastResult = "never";
   });
@@ -345,7 +348,7 @@ function executeBasicWOL(task) {
       task.lastRun = new Date().toISOString();
       task.lastResult = "invalid_mac";
       saveDB();
-      return resolve({ ok: false, result: "invalid_mac" });
+      return resolve({ ok: false, result: "invalid_mac", detail: "Missing MAC address" });
     }
 
     const args = [];
@@ -357,11 +360,13 @@ function executeBasicWOL(task) {
 
     const cmd = `wol ${args.join(" ")}`;
 
-    exec(cmd, { timeout: 3000 }, (error) => {
+    exec(cmd, { timeout: 3000 }, (error, stdout, stderr) => {
       let okFlag, result;
+      let detail;
       if (error) {
         okFlag = false;
         result = "error";
+        detail = error.message || stderr || "WOL command failed";
       } else {
         okFlag = true;
         result = "ok";
@@ -370,7 +375,7 @@ function executeBasicWOL(task) {
       task.lastRun = new Date().toISOString();
       task.lastResult = result;
       saveDB();
-      resolve({ ok: okFlag, result });
+      resolve({ ok: okFlag, result, detail });
     });
   });
 }
@@ -382,7 +387,7 @@ async function executeWadEspPower(task) {
     task.lastRun = new Date().toISOString();
     task.lastResult = "invalid_esp_host";
     saveDB();
-    return { ok: false, result: "invalid_esp_host" };
+    return { ok: false, result: "invalid_esp_host", detail: "Missing ESP host" };
   }
 
   const url = `http://${host}/power/on`;
@@ -400,7 +405,7 @@ async function executeWadEspPower(task) {
       task.lastRun = new Date().toISOString();
       task.lastResult = "http_" + res.status;
       saveDB();
-      return { ok: false, result: "http_" + res.status };
+      return { ok: false, result: "http_" + res.status, detail: res.statusText || "ESP HTTP error" };
     }
 
     task.lastRun = new Date().toISOString();
@@ -411,7 +416,7 @@ async function executeWadEspPower(task) {
     task.lastRun = new Date().toISOString();
     task.lastResult = "error";
     saveDB();
-    return { ok: false, result: "error" };
+    return { ok: false, result: "error", detail: e && e.message ? e.message : "ESP request failed" };
   } finally {
     clearTimeout(timer);
   }
@@ -433,6 +438,7 @@ async function executeWOLTask(task) {
 
   let result = "error";
   let okFlag = false;
+  let detail;
 
   try {
     const creds = Buffer.from(`${task.user}:${task.pass}`).toString("base64");
@@ -453,9 +459,11 @@ async function executeWOLTask(task) {
       result = "ok";
     } else {
       result = "http_" + res.status;
+      detail = res.statusText || "MikroTik HTTP error";
     }
-  } catch {
+  } catch (e) {
     result = "error";
+    detail = e && e.message ? e.message : "MikroTik request failed";
   } finally {
     clearTimeout(timer);
   }
@@ -464,7 +472,7 @@ async function executeWOLTask(task) {
   task.lastResult = result;
   saveDB();
 
-  return { ok: okFlag, result };
+  return { ok: okFlag, result, detail };
 }
 
 
@@ -481,6 +489,7 @@ function executeSSHAction(task, action) {
   return new Promise(resolve => {
     const host = (action.host || task.host || "").trim();
     const user = (action.user || "").trim();
+    const pass = (action.pass || "").trim();
     const command = (action.command || "").trim();
 
     if (!host || !user || !command) {
@@ -488,18 +497,23 @@ function executeSSHAction(task, action) {
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
-      return resolve({ ok: false, result });
+      return resolve({ ok: false, result, detail: "Missing SSH host/user/command" });
     }
 
     const safeCmd = escapeShellSingleQuotes(command);
-    const sshCmd = `ssh -o BatchMode=yes -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`;
+    // If password is provided, use sshpass for interactive login; otherwise fall back to key-based auth
+    const sshCmd = pass
+      ? `sshpass -p '${escapeShellSingleQuotes(pass)}' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`
+      : `ssh -o BatchMode=yes -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`;
 
-    exec(sshCmd, { timeout: 10000 }, (error) => {
+    exec(sshCmd, { timeout: 10000 }, (error, stdout, stderr) => {
       let result;
       let okFlag;
+      let detail;
       if (error) {
         okFlag = false;
         result = "error";
+        detail = error.message || stderr || "SSH command failed";
       } else {
         okFlag = true;
         result = "ok";
@@ -507,7 +521,7 @@ function executeSSHAction(task, action) {
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
-      resolve({ ok: okFlag, result });
+      resolve({ ok: okFlag, result, detail });
     });
   });
 }
@@ -526,15 +540,17 @@ function executeHostAction(action) {
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
-      return resolve({ ok: false, result });
+      return resolve({ ok: false, result, detail: "Missing command" });
     }
 
-    exec(cmd, { timeout: 15000, shell: SHELL_BIN }, (error) => {
+    exec(cmd, { timeout: 15000, shell: SHELL_BIN }, (error, stdout, stderr) => {
       let result;
       let okFlag;
+      let detail;
       if (error) {
         okFlag = false;
         result = "error";
+        detail = error.message || stderr || "Command failed";
       } else {
         okFlag = true;
         result = "ok";
@@ -542,7 +558,7 @@ function executeHostAction(action) {
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
-      resolve({ ok: okFlag, result });
+      resolve({ ok: okFlag, result, detail });
     });
   });
 }
@@ -694,21 +710,25 @@ function checkBatteryAlerts() {
     return;
   }
 
+  // Notify on each threshold crossing (30 -> 15 -> 5), even if the percentage
+  // skips over a value between polls.
+  let targetLevel = null;
   for (const lvl of levels) {
-    if (pct <= lvl) {
-      if (cfg.lastNotifiedLevel !== lvl) {
-        // Fire notification and update lastNotifiedLevel
-        sendBatteryAlert(lvl, pct)
-          .then(() => {
-            cfg.lastNotifiedLevel = lvl;
-            saveDB();
-          })
-          .catch(err => {
-            console.error("Battery alert error:", err);
-          });
-      }
+    if (pct <= lvl && (cfg.lastNotifiedLevel === null || lvl < cfg.lastNotifiedLevel)) {
+      targetLevel = lvl;
       break;
     }
+  }
+
+  if (targetLevel !== null) {
+    sendBatteryAlert(targetLevel, pct)
+      .then(() => {
+        cfg.lastNotifiedLevel = targetLevel;
+        saveDB();
+      })
+      .catch(err => {
+        console.error("Battery alert error:", err);
+      });
   }
 }
 
@@ -1059,6 +1079,7 @@ app.post("/api/wol", requireAdmin, (req, res) => {
         label: (a.label || "").trim(),
         host: (a.host || "").trim(),
         user: (a.user || "").trim(),
+        pass: (a.pass || "").trim(),
         command: (a.command || "").trim(),
         lastRun: null,
         lastResult: "never"
@@ -1182,6 +1203,7 @@ if (task.type === "wadesp") {
           label: (a.label || "").trim(),
           host: (a.host || task.host).trim(),
           user: (a.user || "").trim(),
+          pass: (a.pass || "").trim(),
           command: (a.command || "").trim(),
           lastRun: null,
           lastResult: "never"
