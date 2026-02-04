@@ -278,6 +278,48 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     display: flex; align-items: center; justify-content: center; z-index: 9999;
   }
+
+  /* Toast notifications (action results + errors) */
+  .toast-stack {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    z-index: 10000;
+    width: min(90vw, 360px);
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--drag-ring);
+    border-radius: var(--radius-xl);
+    padding: 0.8rem 0.9rem;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .toast-success { border-left-color: var(--green-text); }
+  .toast-error { border-left-color: var(--red-text); }
+  .toast-title { font-weight: 800; font-size: 0.85rem; }
+  .toast-body { font-size: 0.78rem; color: var(--text-mid); }
+  .toast-detail {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    word-break: break-word;
+  }
+
+  /* Inline form status */
+  .inline-status {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  .inline-status.error { color: var(--red-text); }
+  .inline-status.success { color: var(--green-text); }
 .modal {
   width: min(92vw, 520px);
   max-height: calc(100vh - 2rem);   /* ключевая строка */
@@ -303,7 +345,7 @@
   padding-right: 0.25rem;
 }
 
-
+ 
  .tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
   .tab {
     cursor: pointer; background-image: var(--accent-bg); color: var(--accent-text);
@@ -748,6 +790,7 @@
         <input class="input" id="admin-pass" type="password" placeholder="********" required />
       </div>
       <button class="btn submit" type="submit" id="admin-submit">Unlock</button>
+      <div id="admin-status" class="inline-status"></div>
     </form>
   </div>
 </div>
@@ -772,6 +815,7 @@
         <label class="label">Admin password</label>
         <input class="input" id="settings-pass" type="password" placeholder="********" required />
         <button class="btn submit" type="submit" style="margin-top:.6rem;">Unlock editing</button>
+        <div id="settings-login-status" class="inline-status"></div>
       </form>
 
       <div id="settings-logout-row" class="field hidden" style="margin-top:.25rem;">
@@ -842,6 +886,10 @@
 </div>
 </div>
 </div>
+
+<!-- Action results / error notifications -->
+<div id="toast-stack" class="toast-stack"></div>
+
 <script>
   // ==============================
   // CONFIG
@@ -897,6 +945,7 @@
   const adminCloseBtn  = document.getElementById("admin-close");
   const adminForm      = document.getElementById("admin-form");
   const adminPassInput = document.getElementById("admin-pass");
+  const adminStatusEl  = document.getElementById("admin-status");
 
   const svcMethodEl      = document.getElementById("svc-method");
   const svcCheckLabelEl  = document.getElementById("svc-check-label");
@@ -917,6 +966,7 @@
   const settingsSessionText   = document.getElementById("settings-session-text");
   const settingsLoginForm     = document.getElementById("settings-login-form");
   const settingsPassInput     = document.getElementById("settings-pass");
+  const settingsLoginStatusEl = document.getElementById("settings-login-status");
   const settingsLogoutRow     = document.getElementById("settings-logout-row");
   const settingsLogoutBtn     = document.getElementById("settings-logout-btn");
 
@@ -951,6 +1001,47 @@
   // ==============================
   // UTIL
   // ==============================
+  // Toast notifications for action results + errors (replaces browser alerts)
+  const toastStack = document.getElementById("toast-stack");
+
+  function showToast({ title, message, detail, type = "success", ttl = 5000 }) {
+    if (!toastStack) return;
+    const toast = document.createElement("div");
+    toast.className = `toast ${type === "error" ? "toast-error" : "toast-success"}`;
+
+    const t = document.createElement("div");
+    t.className = "toast-title";
+    t.textContent = title || (type === "error" ? "Error" : "Success");
+
+    const b = document.createElement("div");
+    b.className = "toast-body";
+    b.textContent = message || "";
+
+    toast.appendChild(t);
+    toast.appendChild(b);
+
+    if (detail) {
+      const d = document.createElement("div");
+      d.className = "toast-detail";
+      d.textContent = detail;
+      toast.appendChild(d);
+    }
+
+    toastStack.appendChild(toast);
+
+    setTimeout(() => {
+      toast.remove();
+    }, ttl);
+  }
+
+  function formatActionError(resp) {
+    if (!resp) return { message: "Unknown error", detail: "" };
+    if (resp.result && resp.result !== "error") {
+      return { message: `Result: ${resp.result}`, detail: resp.detail || "" };
+    }
+    return { message: "Action failed", detail: resp.detail || resp.result || "" };
+  }
+
   function fmt(ts) {
     if (!ts) return "never";
     const d = new Date(ts);
@@ -1022,6 +1113,10 @@
     }
     pendingAction = actionFn;
     adminPassInput.value = "";
+    if (adminStatusEl) {
+      adminStatusEl.textContent = "";
+      adminStatusEl.classList.remove("error", "success");
+    }
     adminOverlay.classList.remove("hidden");
     adminPassInput.focus();
   }
@@ -1041,6 +1136,11 @@
   adminForm.addEventListener("submit", async e => {
     e.preventDefault();
     const pw = adminPassInput.value;
+
+    if (adminStatusEl) {
+      adminStatusEl.textContent = "";
+      adminStatusEl.classList.remove("error", "success");
+    }
 
     const res = await fetch(API_BASE + "/login", {
       method: "POST",
@@ -1065,6 +1165,15 @@
         adminOverlay.classList.add("hidden");
       }
     } else {
+      const payload = await res.json().catch(() => ({}));
+      const err = payload && payload.error ? payload.error : "bad_password";
+      if (adminStatusEl) {
+        adminStatusEl.textContent =
+          err === "password_too_short"
+            ? "Password too short (min 6 characters)."
+            : "Wrong admin password.";
+        adminStatusEl.classList.add("error");
+      }
       adminPassInput.value = "";
       adminPassInput.focus();
     }
@@ -1108,7 +1217,7 @@ function syncSettingsUI() {
   // ==============================
   // SETTINGS MODAL (edit mode + battery alerts)
   // ==============================
-
+ 
 async function changeAdminPassword(oldPw, newPw) {
   const res = await apiJSON("PUT", "/admin/password", {
     oldPassword: oldPw,
@@ -1116,9 +1225,9 @@ async function changeAdminPassword(oldPw, newPw) {
   });
 
   if (res && res.ok) {
-    alert("Password changed");
+    showToast({ title: "Admin Password", message: "Password changed", type: "success" });
   } else {
-    alert("Password change failed");
+    showToast({ title: "Admin Password", message: "Password change failed", type: "error" });
   }
 }
 
@@ -1157,6 +1266,10 @@ async function changeAdminPassword(oldPw, newPw) {
       settingsLogoutRow.classList.add("hidden");
       settingsPassInput.value = "";
       settingsPassInput.focus();
+      if (settingsLoginStatusEl) {
+        settingsLoginStatusEl.textContent = "";
+        settingsLoginStatusEl.classList.remove("error", "success");
+      }
       adminOnlyBox.classList.add("hidden");
     }
   }
@@ -1172,6 +1285,11 @@ async function changeAdminPassword(oldPw, newPw) {
     e.preventDefault();
     const pw = settingsPassInput.value;
     if (!pw) return;
+
+    if (settingsLoginStatusEl) {
+      settingsLoginStatusEl.textContent = "";
+      settingsLoginStatusEl.classList.remove("error", "success");
+    }
 
     const res = await fetch(API_BASE + "/login", {
       method: "POST",
@@ -1194,6 +1312,15 @@ async function changeAdminPassword(oldPw, newPw) {
       // updateBatteryFormDisabled();
       await loadBatteryConfigIntoForm();
     } else {
+      const payload = await res.json().catch(() => ({}));
+      const err = payload && payload.error ? payload.error : "bad_password";
+      if (settingsLoginStatusEl) {
+        settingsLoginStatusEl.textContent =
+          err === "password_too_short"
+            ? "Password too short (min 6 characters)."
+            : "Wrong admin password.";
+        settingsLoginStatusEl.classList.add("error");
+      }
       settingsPassInput.value = "";
       settingsPassInput.focus();
     }
@@ -1203,7 +1330,7 @@ async function changeAdminPassword(oldPw, newPw) {
      await logoutRequest();
      editMode = false;
      forceLogoutUI();
-     syncSettingsUI();
+     syncSettingsUI();   
   });
 
   batterySaveBtn.addEventListener("click", async () => {
@@ -1364,6 +1491,7 @@ async function changeAdminPassword(oldPw, newPw) {
     const row = document.createElement("div");
     row.className = "ssh-row";
 
+    // SSH action inputs (label/user/host/pass/command)
     const labelInput = document.createElement("input");
     labelInput.className = "input ssh-input";
     labelInput.placeholder = "Button label (e.g. Shutdown PC)";
@@ -1382,6 +1510,13 @@ async function changeAdminPassword(oldPw, newPw) {
     hostInput.value = action.host || wolHostInput.value.trim();
     hostInput.dataset.field = "host";
 
+    const passInput = document.createElement("input");
+    passInput.className = "input ssh-input";
+    passInput.type = "password";
+    passInput.placeholder = "SSH password (optional)";
+    passInput.value = action.pass || "";
+    passInput.dataset.field = "pass";
+
     const cmdInput = document.createElement("input");
     cmdInput.className = "input ssh-input";
     cmdInput.placeholder = "SSH command (e.g. sudo systemctl poweroff)";
@@ -1397,6 +1532,7 @@ async function changeAdminPassword(oldPw, newPw) {
     row.appendChild(labelInput);
     row.appendChild(userInput);
     row.appendChild(hostInput);
+    row.appendChild(passInput);
     row.appendChild(cmdInput);
     row.appendChild(removeBtn);
 
@@ -1415,12 +1551,14 @@ async function changeAdminPassword(oldPw, newPw) {
       const label = row.querySelector("input[data-field='label']").value.trim();
       const user  = row.querySelector("input[data-field='user']").value.trim();
       const host  = row.querySelector("input[data-field='host']").value.trim();
+      const pass  = row.querySelector("input[data-field='pass']").value;
       const cmd   = row.querySelector("input[data-field='command']").value.trim();
       if (!label || !user || !cmd) return;
       actions.push({
         label,
         user,
         host,
+        pass,
         command: cmd
       });
     });
@@ -1572,13 +1710,13 @@ formWol.addEventListener("submit", async e => {
   e.preventDefault();
   if (!editMode) return;
 
-  body.sshActions = collectWolSshActions();
   const type = document.getElementById("wol-type").value;
 
   let body = {
-    name:  document.getElementById("wol-name").value.trim(),
+    name: document.getElementById("wol-name").value.trim(),
     type,
-    notes: document.getElementById("wol-notes").value.trim()
+    notes: document.getElementById("wol-notes").value.trim(),
+    sshActions: collectWolSshActions()
   };
 
   if (type === "basic") {
@@ -1590,26 +1728,23 @@ formWol.addEventListener("submit", async e => {
   }
 
   if (type === "mikrotik") {
-    body.host       = document.getElementById("wol-host").value.trim();
-    body.user       = document.getElementById("wol-user").value.trim();
-    body.pass       = document.getElementById("wol-pass").value.trim();
-    body.scriptId   = document.getElementById("wol-script").value.trim();
+    body.host     = document.getElementById("wol-host").value.trim();
+    body.user     = document.getElementById("wol-user").value.trim();
+    body.pass     = document.getElementById("wol-pass").value.trim();
+    body.scriptId = document.getElementById("wol-script").value.trim();
     if (!body.host || !body.user || !body.pass || !body.scriptId) return;
   }
 
+  if (type === "wadesp") {
+    body.espHost = document.getElementById("wol-esp-host").value.trim();
+    if (!body.espHost) return;
+  }
 
-if (type === "wadesp") {
-  body.espHost = document.getElementById("wol-esp-host").value.trim();
-  if (!body.espHost) return;
-}
-
-
-if (mode.action === "edit" && mode.id) {
-  body.type = type; // ОБЯЗАТЕЛЬНО
-  await apiJSON("PUT", "/wol/" + mode.id, body);
-} else {
-  await apiJSON("POST", "/wol", body);
-}
+  if (mode.action === "edit" && mode.id) {
+    await apiJSON("PUT", "/wol/" + mode.id, body);
+  } else {
+    await apiJSON("POST", "/wol", body);
+  }
 
   hideModal();
   await loadStateFromServer();
@@ -1687,9 +1822,10 @@ if (mode.action === "edit" && mode.id) {
   async function runWol(id) {
     const resp = await apiPOSTNoBody("/wol/" + id + "/run");
     if (resp && resp.ok) {
-      alert("Executed");
+      showToast({ title: "WOL", message: "Executed successfully", type: "success" });
     } else {
-      alert("Error: " + (resp && resp.result ? resp.result : "unknown"));
+      const err = formatActionError(resp);
+      showToast({ title: "WOL", message: err.message, detail: err.detail, type: "error" });
     }
     await loadStateFromServer();
   }
@@ -1697,9 +1833,10 @@ if (mode.action === "edit" && mode.id) {
   async function runWolSsh(wolId, actionId) {
     const resp = await apiPOSTNoBody(`/wol/${wolId}/ssh/${actionId}/run`);
     if (resp && resp.ok) {
-      alert("SSH action executed");
+      showToast({ title: "SSH Action", message: "Executed successfully", type: "success" });
     } else {
-      alert("SSH error: " + (resp && resp.result ? resp.result : "unknown"));
+      const err = formatActionError(resp);
+      showToast({ title: "SSH Action", message: err.message, detail: err.detail, type: "error" });
     }
     await loadStateFromServer();
   }
@@ -1707,9 +1844,10 @@ if (mode.action === "edit" && mode.id) {
   async function runHostAction(id) {
     const resp = await apiPOSTNoBody(`/host-action/${id}/run`);
     if (resp && resp.ok) {
-      alert("Device command executed");
+      showToast({ title: "Device Command", message: "Executed successfully", type: "success" });
     } else {
-      alert("Command error: " + (resp && resp.result ? resp.result : "unknown"));
+      const err = formatActionError(resp);
+      showToast({ title: "Device Command", message: err.message, detail: err.detail, type: "error" });
     }
     await loadStateFromServer();
   }
@@ -2216,6 +2354,10 @@ const adminStatus = await fetch("/api/admin/status").then(r => r.json());
 if (!adminStatus.initialized) {
   adminOverlay.classList.remove("hidden");
   adminPassInput.placeholder = "Set admin password";
+  if (adminStatusEl) {
+    adminStatusEl.textContent = "Set a new admin password (min 6 characters).";
+    adminStatusEl.classList.remove("error");
+  }
 }
 
 
