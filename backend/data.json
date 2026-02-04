@@ -3,9 +3,9 @@
     {
       "id": "svc-1",
       "name": "WireGuard VPN",
-      "openUrl": "https://vpn.wadph.top",
-      "checkUrl": "https://vpn.wadph.top",
-      "notes": "—\nIP: 151.145.84.149\nPort: 51821",
+      "openUrl": "https://vpn.test.top",
+      "checkUrl": "https://vpn.test.top",
+      "notes": "—\nIP: 1.1.1.1\nPort: 51821",
       "lastStatus": "UP",
       "lastChecked": "2025-11-03T10:23:19.854Z",
       "method": "http"
@@ -13,8 +13,8 @@
     {
       "id": "svc-1761590630796",
       "name": "WoL Control Panel",
-      "openUrl": "https://wol.wadph.top",
-      "checkUrl": "https://wol.wadph.top",
+      "openUrl": "https://wol.test.top",
+      "checkUrl": "https://wol.test.top",
       "notes": "—\nIP: 192.168.101.2",
       "lastStatus": "UP",
       "lastChecked": "2025-11-03T10:23:20.721Z",
@@ -23,8 +23,8 @@
     {
       "id": "svc-1761590396626",
       "name": "ProxmoxVE",
-      "openUrl": "https://pve.wadph.top",
-      "checkUrl": "https://pve.wadph.top",
+      "openUrl": "https://pve.test.top",
+      "checkUrl": "https://pve.test.top",
       "notes": "—\nIP: 192.168.100.10\nPort: 8006",
       "lastStatus": "DOWN",
       "lastChecked": "2025-11-03T10:23:21.324Z",
@@ -33,8 +33,8 @@
     {
       "id": "svc-1761590440981",
       "name": "Proxmox File Browser",
-      "openUrl": "https://pvebrowser.wadph.top",
-      "checkUrl": "https://pvebrowser.wadph.top",
+      "openUrl": "https://pvebrowser.test.top",
+      "checkUrl": "https://pvebrowser.test.top",
       "notes": "—\nIP: 192.168.100.10\nPort: 8007",
       "lastStatus": "DOWN",
       "lastChecked": "2025-11-03T10:23:21.895Z",
@@ -42,11 +42,11 @@
     },
     {
       "id": "svc-1761676217071",
-      "name": "WADPH-PC",
+      "name": "test-PC",
       "openUrl": "https://remotedesktop.google.com/access",
       "checkUrl": "192.168.100.3",
       "method": "ping",
-      "notes": "—\nIP: 192.168.100.7\nWADPH-PC Status",
+      "notes": "—\nIP: 192.168.100.7\ntest-PC Status",
       "lastStatus": "DOWN",
       "lastChecked": "2025-11-03T10:23:23.961Z"
     }
@@ -116,7 +116,7 @@
     },
     {
       "id": "wol-1761675204476",
-      "name": "WADPH-PC",
+      "name": "test-PC",
       "host": "192.168.100.6",
       "user": "admin",
       "pass": "A0773565292a!",
