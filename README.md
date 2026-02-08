@@ -2,15 +2,38 @@
 
 <img width="967" height="1003" alt="Wadboard screenshot" src="https://github.com/user-attachments/assets/eb055ea7-3c05-4442-a678-cdc8c4bd7f88" />
 
-Wadboard is a self-hosted, minimalistic dashboard designed to monitor internal services, manage quick links, and remotely control devices (Wake-on-LAN, SSH actions, power relays).
+## Navigation
+
+- [Overview](#wadboard--your-own-lightweight-infrastructure-dashboard)
+- [Core Features](#core-features)
+  - [Service Monitoring](#-service-monitoring)
+  - [Quick Links](#-quick-links)
+  - [Remote Power & Wake-on-LAN](#-remote-power--wake-on-lan)
+  - [SSH Actions](#-ssh-actions)
+  - [Host Maintenance Commands](#️-host-maintenance-commands)
+  - [Health & Host Metrics](#-health--host-metrics-public)
+  - [Battery Monitoring](#-battery-monitoring-optional)
+  - [Secure Edit Mode](#-secure-edit-mode)
+- [UI / UX](#ui--ux)
+- [Philosophy](#philosophy)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Security Model](#security-model)
+- [Wake-on-LAN & Power Control](#wake-on-lan--power-control)
+- [SSH Actions (Details)](#ssh-actions-1)
+- [Nginx Reverse Proxy](#nginx-reverse-proxy-optional)
+- [Project Structure](#projectrepo-structure-)
+
+Wadboard is a self-hosted, minimalistic dashboard designed to monitor internal services, manage quick links, and remotely control devices (Wake-on-LAN, SSH actions, power relays), **and view live host health metrics**.
 
 The project is intentionally simple:
-- single HTML frontend
+- single HTML frontend (SPA)
 - Node.js backend
 - no external database
 - no cloud dependencies
 
 Everything runs locally and is fully under your control.
+
 
 ---
 
@@ -43,7 +66,7 @@ Wadboard supports multiple WOL / power-on methods:
   - Designed to emulate a physical PC power button
 
 ### 🔐 SSH Actions
-- Attach arbitrary SSH commands to WOL tasks
+- Attach arbitrary SSH commands to WOL tasks (key-based or password-based)
 - Can be used for:
   - shutdown
   - reboot
@@ -57,16 +80,33 @@ Wadboard supports multiple WOL / power-on methods:
   - maintenance scripts
   - diagnostics
 
+### ❤️ Health & Host Metrics (Public)
+- Full-page Health view at `/health` (no admin password required)
+- Live host metrics:
+  - CPU usage and load average
+  - Memory usage
+  - Storage usage
+  - System info (uptime, platform, arch)
+  - Battery status (best-effort)
+- Auto-refresh every 10 seconds
+- Works on **Termux (Android)** and **Ubuntu/Linux**
+- Graceful degradation with visible hints if a metric is unavailable
+
 ### 🔋 Battery Monitoring (Optional)
 - For Termux hosts with `termux-api`
 - Periodic battery status polling
-- Telegram alerts on low battery thresholds
+- Telegram alerts on low battery thresholds (supports multiple levels, e.g. 30 → 15 → 5)
 
 ### 🔑 Secure Edit Mode
 - No hardcoded admin password
 - Password is set on first login
 - Editing is locked behind an **admin session**
 - View mode is always read-only and safe
+
+## UI / UX
+- Toolbar buttons use modern icon-based UI (theme-aware)
+- Consistent behavior across Home and Health pages
+- Non-blocking toast notifications for action results and errors
 
 ---
 
@@ -96,6 +136,8 @@ It is **not** intended to be exposed directly to the internet without a reverse 
   - For host info and battery monitoring
 - **ESP8266 / ESP32**
   - For WadESP-PowerSW
+- **sshpass**
+  - Required only if you want to use password-based SSH actions
 
 ---
 
@@ -228,7 +270,7 @@ server {
 ├── LICENSE
 ├── README.md
 ├── backend
-│   ├── data.json          #<— Wadboard Date Base file, like your custom services, quick links ans etc...
+│   ├── wadph-data.json    #<— Persistent storage (services, links, config, brand text, passwords)
 │   ├── package-lock.json  #<— Versions
 │   ├── package.json       #<— Versions
 │   └── server.js          #<— Main backend file, checking services status, sending WoL and etc...
