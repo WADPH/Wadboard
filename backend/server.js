@@ -45,6 +45,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { fileURLToPath } from "url";
 import fetch from "node-fetch";
 import https from "https";
@@ -106,13 +107,24 @@ function defaultBatteryAlertsConfig() {
   };
 }
 
+function sanitizeBrandText(value) {
+  const s = String(value == null ? "" : value);
+  return s
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[<>]/g, "")
+    .trim()
+    .slice(0, 40);
+}
+
 let db = {
   services: [],
   links: [],
   wol: [],
   hostActions: [],
   config: {
-    batteryAlerts: defaultBatteryAlertsConfig()
+    batteryAlerts: defaultBatteryAlertsConfig(),
+    brandText: ""
   },
   admin: {
     passwordHash: null, // <-- ВАЖНО
@@ -155,6 +167,10 @@ function ensureConfigStructure() {
     if (!("lastNotifiedLevel" in cfg)) cfg.lastNotifiedLevel = null;
   }
 
+  if (typeof db.config.brandText !== "string") {
+    db.config.brandText = "";
+  }
+
 if (!db.admin || typeof db.admin !== "object") {
   db.admin = { passwordHash: null, initialized: false };
 }
@@ -166,6 +182,12 @@ if (db.admin.passwordHash === undefined) db.admin.passwordHash = null;
 function getBatteryAlertsConfig() {
   ensureConfigStructure();
   return db.config.batteryAlerts;
+}
+
+function getBrandTextConfig() {
+  ensureConfigStructure();
+  const custom = sanitizeBrandText(db.config.brandText || "");
+  return { custom, text: custom || "WELCOME" };
 }
 
 function loadDB() {
@@ -611,6 +633,20 @@ app.use(express.json());
 app.use(cookieParser());
 
 // -----------------------
+// Frontend (SPA) serving
+// -----------------------
+const FRONTEND_DIR = path.join(__dirname, "..", "frontend");
+const FRONTEND_INDEX = path.join(FRONTEND_DIR, "index.html");
+if (fs.existsSync(FRONTEND_INDEX)) {
+  app.use(express.static(FRONTEND_DIR));
+
+  // SPA-style route for /health (and direct loads on /)
+  app.get(["/", "/health"], (req, res) => {
+    res.sendFile(FRONTEND_INDEX);
+  });
+}
+
+// -----------------------
 // Termux info.sh integration (host info header)
 // -----------------------
 let hostInfo = {
@@ -774,6 +810,372 @@ app.get("/api/hostinfo", (req, res) => {
 });
 
 // -----------------------
+// Host health metrics (public read-only)
+// -----------------------
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function getCpuUsagePercent() {
+  // Prefer /proc/stat on Linux/Android (Termux) because Node's os.cpus()
+  // can return non-updating times on some Android builds.
+  try {
+    if (fs.existsSync("/proc/stat")) {
+      const readProcStatText = async () => {
+        try {
+          return fs.readFileSync("/proc/stat", "utf8");
+        } catch (e) {
+          const code = e && e.code ? String(e.code) : "";
+          if (code !== "EACCES" && code !== "EPERM") throw e;
+
+          // Some Android/Termux devices restrict /proc/stat; try root via su.
+          const suRes = await execCmd('su -c "cat /proc/stat"', { timeoutMs: 1200 });
+          if (suRes.ok && suRes.stdout) return suRes.stdout;
+          throw e;
+        }
+      };
+
+      const parseTotalsFromText = (txt) => {
+        const line = txt.split("\n").find(l => /^cpu\s/.test(l));
+        if (!line) return null;
+
+        const parts = line.trim().split(/\s+/).slice(1).map(v => parseInt(v, 10));
+        if (parts.length < 4 || parts.some(v => !Number.isFinite(v))) return null;
+
+        const [
+          user, nice, system, idle,
+          iowait = 0, irq = 0, softirq = 0, steal = 0
+        ] = parts;
+
+        const idleAll = idle + iowait;
+        const nonIdle = user + nice + system + irq + softirq + steal;
+        const total = idleAll + nonIdle;
+        return { idle: idleAll, total };
+      };
+
+      const aTxt = await readProcStatText();
+      const a = parseTotalsFromText(aTxt);
+      await sleep(250);
+      const bTxt = await readProcStatText();
+      const b = parseTotalsFromText(bTxt);
+      if (!a || !b) return null;
+
+      const totalDelta = b.total - a.total;
+      const idleDelta = b.idle - a.idle;
+      if (!(totalDelta > 0)) return null;
+
+      const usage = 100 * (1 - (idleDelta / totalDelta));
+      const rounded = Math.round(usage * 10) / 10;
+      return Math.max(0, Math.min(100, rounded));
+    }
+  } catch (e) {
+    const code = e && e.code ? String(e.code) : "";
+    if (code === "EACCES" || code === "EPERM") throw e;
+    // ignore; fall back below
+  }
+
+  try {
+    const start = os.cpus();
+    if (!Array.isArray(start) || !start.length) return null;
+    await sleep(200);
+    const end = os.cpus();
+    if (!Array.isArray(end) || !end.length) return null;
+
+    let idle = 0;
+    let total = 0;
+
+    const len = Math.min(start.length, end.length);
+    for (let i = 0; i < len; i++) {
+      const s = start[i].times;
+      const e = end[i].times;
+      const idleDelta = (e.idle - s.idle);
+      const totalDelta =
+        (e.user - s.user) +
+        (e.nice - s.nice) +
+        (e.sys - s.sys) +
+        (e.irq - s.irq) +
+        (e.idle - s.idle);
+
+      idle += idleDelta;
+      total += totalDelta;
+    }
+
+    if (!(total > 0)) return null;
+    const usage = 100 * (1 - (idle / total));
+    const rounded = Math.round(usage * 10) / 10;
+    return Math.max(0, Math.min(100, rounded));
+  } catch {
+    return null;
+  }
+}
+
+async function getCpuUsage() {
+  try {
+    const pct = await getCpuUsagePercent();
+    if (Number.isFinite(pct)) return { usagePercent: pct, hint: null };
+    return { usagePercent: null, hint: "CPU usage unavailable" };
+  } catch (e) {
+    const code = e && e.code ? String(e.code) : "";
+    if (code === "EACCES" || code === "EPERM") {
+      return {
+        usagePercent: null,
+        hint: 'CPU usage requires access to "/proc/stat". On some Android/Termux devices this needs root. Start Wadboard as root (e.g. `tsu` / `su`) or grant root.'
+      };
+    }
+    return { usagePercent: null, hint: "CPU usage unavailable" };
+  }
+}
+
+function getCpuCoreCount() {
+  try {
+    const n = os.cpus().length;
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (fs.existsSync("/proc/cpuinfo")) {
+      const txt = fs.readFileSync("/proc/cpuinfo", "utf8");
+      const count = txt
+        .split("\n")
+        .filter(l => /^\s*processor\s*:/.test(l))
+        .length;
+      if (count > 0) return count;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (fs.existsSync("/proc/stat")) {
+      const txt = fs.readFileSync("/proc/stat", "utf8");
+      const count = txt
+        .split("\n")
+        .filter(l => /^cpu\d+\s/.test(l))
+        .length;
+      if (count > 0) return count;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+function getPrimaryIPv4() {
+  try {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      const list = nets[name] || [];
+      for (const n of list) {
+        if (!n) continue;
+        if (n.family === "IPv4" && !n.internal) return n.address;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function execCmd(cmd, { timeoutMs = 2000 } = {}) {
+  return new Promise(resolve => {
+    exec(cmd, { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) {
+        const msg = `${stderr || ""} ${err.message || ""}`.toLowerCase();
+        const missing =
+          msg.includes("not found") ||
+          msg.includes("no such file") ||
+          msg.includes("is not recognized") ||
+          err.code === 127;
+        return resolve({
+          ok: false,
+          missing,
+          stdout: stdout || "",
+          stderr: stderr || "",
+          error: err.message || String(err)
+        });
+      }
+      resolve({ ok: true, stdout: stdout || "", stderr: stderr || "" });
+    });
+  });
+}
+
+function isAndroidLike() {
+  return !!(
+    process.env.ANDROID_ROOT ||
+    process.env.ANDROID_DATA ||
+    (typeof os.release === "function" && String(os.release()).toLowerCase().includes("android"))
+  );
+}
+
+function pickStoragePath() {
+  if (!isAndroidLike()) return "/";
+
+  const candidates = [
+    "/storage/emulated/0",
+    "/storage/emulated",
+    "/data/media/0",
+    "/data/media"
+  ];
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) return p;
+    } catch {
+      // ignore
+    }
+  }
+
+  return "/";
+}
+
+async function getDiskUsage(pathToCheck) {
+  const safePath = pathToCheck || "/";
+  const r = await execCmd(`df -kP ${safePath}`, { timeoutMs: 2000 });
+  if (!r.ok) {
+    return {
+      available: false,
+      path: safePath,
+      hint: r.missing ? "Install coreutils (df)" : (r.error || "df failed")
+    };
+  }
+
+  const lines = String(r.stdout || "").trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) {
+    return { available: false, path: safePath, hint: "Unexpected df output" };
+  }
+
+  const parts = lines[lines.length - 1].trim().split(/\s+/);
+  if (parts.length < 6) {
+    return { available: false, path: safePath, hint: "Unexpected df columns" };
+  }
+
+  const totalKiB = parseInt(parts[1], 10);
+  const usedKiB = parseInt(parts[2], 10);
+  const availKiB = parseInt(parts[3], 10);
+  const usedPct = parseInt(String(parts[4]).replace("%", ""), 10);
+  const mount = parts[5];
+
+  if (![totalKiB, usedKiB, availKiB].every(Number.isFinite)) {
+    return { available: false, path: safePath, hint: "Unexpected df numbers" };
+  }
+
+  return {
+    available: true,
+    path: safePath,
+    mount,
+    totalBytes: totalKiB * 1024,
+    usedBytes: usedKiB * 1024,
+    freeBytes: availKiB * 1024,
+    usedPercent: Number.isFinite(usedPct) ? usedPct : null
+  };
+}
+
+async function getBatteryInfo() {
+  // Termux (termux-api package + Termux:API app)
+  const termux = await execCmd("termux-battery-status", { timeoutMs: 1500 });
+  if (termux.ok) {
+    try {
+      const j = JSON.parse(termux.stdout);
+      return {
+        available: true,
+        percent: Number.isFinite(Number(j.percentage)) ? Number(j.percentage) : null,
+        status: typeof j.status === "string" ? j.status : null
+      };
+    } catch {
+      return { available: false, hint: "termux-battery-status returned invalid JSON" };
+    }
+  }
+  if (termux.missing) {
+    // try upower (Linux desktop/server)
+    const devs = await execCmd("upower -e", { timeoutMs: 1500 });
+    if (!devs.ok) {
+      return {
+        available: false,
+        hint: devs.missing
+          ? "Install termux-api (Termux) or upower (Ubuntu/Debian)"
+          : (devs.error || "Battery info unavailable")
+      };
+    }
+
+    const bat = devs.stdout
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .find(s => s.toLowerCase().includes("battery"));
+
+    if (!bat) return { available: false, hint: "No battery device found" };
+
+    const info = await execCmd(`upower -i ${bat}`, { timeoutMs: 1500 });
+    if (!info.ok) {
+      return {
+        available: false,
+        hint: info.missing ? "Install upower" : (info.error || "upower failed")
+      };
+    }
+
+    const pctLine = info.stdout.split(/\r?\n/).find(l => l.trim().startsWith("percentage:"));
+    const stateLine = info.stdout.split(/\r?\n/).find(l => l.trim().startsWith("state:"));
+    const pct = pctLine ? parseInt(pctLine.split(":")[1].replace("%", "").trim(), 10) : null;
+    const state = stateLine ? stateLine.split(":")[1].trim() : null;
+    return { available: true, percent: Number.isFinite(pct) ? pct : null, status: state };
+  }
+
+  return {
+    available: false,
+    hint: termux.error || "Battery info unavailable"
+  };
+}
+
+app.get("/api/health", async (req, res) => {
+  try {
+    const cpuUsage = await getCpuUsage();
+    const totalBytes = os.totalmem();
+    const freeBytes = os.freemem();
+    const usedBytes = totalBytes - freeBytes;
+    const memPct = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 1000) / 10 : null;
+
+    const storagePath = pickStoragePath();
+    const disk = await getDiskUsage(storagePath);
+    const battery = await getBatteryInfo();
+
+    res.json({
+      ok: true,
+      updatedAt: new Date().toISOString(),
+      system: {
+        hostname: os.hostname(),
+        platform: os.platform(),
+        arch: os.arch(),
+        release: os.release(),
+        uptimeSec: os.uptime()
+      },
+      cpu: {
+        cores: getCpuCoreCount(),
+        usagePercent: cpuUsage.usagePercent,
+        hint: cpuUsage.hint,
+        loadavg: os.loadavg()
+      },
+      memory: {
+        totalBytes,
+        usedBytes,
+        freeBytes,
+        usedPercent: memPct
+      },
+      disk,
+      storage: disk,
+      network: {
+        ipv4: getPrimaryIPv4()
+      },
+      battery
+    });
+  } catch (e) {
+    console.error("/api/health error:", e && e.message ? e.message : e);
+    res.status(500).json({ ok: false, error: "health_failed" });
+  }
+});
+
+// -----------------------
 // Battery alerts config endpoints (admin)
 // -----------------------
 app.get("/api/battery-alerts", requireAdmin, (req, res) => {
@@ -820,6 +1222,24 @@ app.put("/api/battery-alerts", requireAdmin, (req, res) => {
       levels: cfg.levels
     }
   });
+});
+
+// -----------------------
+// Brand text endpoints
+// -----------------------
+app.get("/api/brand-text", (req, res) => {
+  const cfg = getBrandTextConfig();
+  res.json({ text: cfg.text, custom: cfg.custom });
+});
+
+app.put("/api/brand-text", requireAdmin, (req, res) => {
+  ensureConfigStructure();
+  const { text } = req.body || {};
+  const cleaned = sanitizeBrandText(text);
+  db.config.brandText = cleaned || "";
+  saveDB();
+  const cfg = getBrandTextConfig();
+  res.json({ ok: true, text: cfg.text, custom: cfg.custom });
 });
 
 // -----------------------
