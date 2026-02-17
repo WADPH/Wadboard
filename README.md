@@ -1,6 +1,6 @@
 # Wadboard — Your Own Lightweight Infrastructure Dashboard
 
-<img width="967" height="1003" alt="Wadboard screenshot" src="https://github.com/user-attachments/assets/eb055ea7-3c05-4442-a678-cdc8c4bd7f88" />
+<img width="967" height="1003" alt="image" src="https://github.com/user-attachments/assets/8f3e1e39-cd9c-4582-ba42-4b16a3463e08" />
 
 ## Navigation
 
