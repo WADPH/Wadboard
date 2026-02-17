@@ -513,6 +513,12 @@
   .ssh-row .btn {
     flex: 0 0 auto;
   }
+  .ssh-note {
+    flex: 1 1 100%;
+    margin-top: -0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
 
 
 
@@ -1474,6 +1480,9 @@
 
   function formatActionError(resp) {
     if (!resp) return { message: "Unknown error", detail: "" };
+    if (resp.result === "missing_sshpass") {
+      return { message: "sshpass не установлен", detail: resp.detail || "" };
+    }
     if (resp.result && resp.result !== "error") {
       return { message: `Result: ${resp.result}`, detail: resp.detail || "" };
     }
@@ -1968,6 +1977,17 @@ batterySaveBtn.addEventListener("click", async () => {
     passInput.value = action.pass || "";
     passInput.dataset.field = "pass";
 
+    const passNote = document.createElement("div");
+    passNote.className = "ssh-note";
+    passNote.textContent = "Note: Password-based SSH requires sshpass to be installed on the device where Wadboard is running";
+
+    function syncPassNote() {
+      const hasPass = !!String(passInput.value || "").trim();
+      passNote.style.display = hasPass ? "block" : "none";
+    }
+    passInput.addEventListener("input", syncPassNote);
+    syncPassNote();
+
     const cmdInput = document.createElement("input");
     cmdInput.className = "input ssh-input";
     cmdInput.placeholder = "SSH command (e.g. sudo systemctl poweroff)";
@@ -1984,6 +2004,7 @@ batterySaveBtn.addEventListener("click", async () => {
     row.appendChild(userInput);
     row.appendChild(hostInput);
     row.appendChild(passInput);
+    row.appendChild(passNote);
     row.appendChild(cmdInput);
     row.appendChild(removeBtn);
 
