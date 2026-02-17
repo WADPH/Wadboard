@@ -507,35 +507,53 @@ function escapeShellSingleQuotes(str) {
   return String(str).replace(/'/g, `'\\''`);
 }
 
-function executeSSHAction(task, action) {
-  return new Promise(resolve => {
-    const host = (action.host || task.host || "").trim();
-    const user = (action.user || "").trim();
-    const pass = (action.pass || "").trim();
-    const command = (action.command || "").trim();
+async function executeSSHAction(task, action) {
+  const host = (action.host || task.host || "").trim();
+  const user = (action.user || "").trim();
+  const pass = (action.pass || "").trim();
+  const command = (action.command || "").trim();
 
-    if (!host || !user || !command) {
-      const result = "invalid_config";
+  if (!host || !user || !command) {
+    const result = "invalid_config";
+    action.lastRun = new Date().toISOString();
+    action.lastResult = result;
+    saveDB();
+    return { ok: false, result, detail: "Missing SSH host/user/command" };
+  }
+
+  // Password-based SSH requires sshpass to be installed on the host running Wadboard.
+  if (pass) {
+    const chk = await execCmd("sshpass -V", { timeoutMs: 1200 });
+    if (!chk.ok) {
+      const result = "missing_sshpass";
+      const hint = isAndroidLike()
+        ? "Для SSH по паролю нужен sshpass. Termux: pkg install sshpass"
+        : "Для SSH по паролю нужен sshpass. Установите sshpass на хосте где запущен Wadboard (например: apt install sshpass)";
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
-      return resolve({ ok: false, result, detail: "Missing SSH host/user/command" });
+      return { ok: false, result, detail: hint };
     }
+  }
 
-    const safeCmd = escapeShellSingleQuotes(command);
-    // If password is provided, use sshpass for interactive login; otherwise fall back to key-based auth
-    const sshCmd = pass
-      ? `sshpass -p '${escapeShellSingleQuotes(pass)}' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`
-      : `ssh -o BatchMode=yes -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`;
+  const safeCmd = escapeShellSingleQuotes(command);
 
-    exec(sshCmd, { timeout: 10000 }, (error, stdout, stderr) => {
+  // If password is provided, use sshpass with env var (avoids leaking password in process args).
+  const sshCmd = pass
+    ? `sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 ${user}@${host} '${safeCmd}'`
+    : `ssh -o BatchMode=yes -o ConnectTimeout=5 ${user}@${host} '${safeCmd}'`;
+
+  const env = pass ? { ...process.env, SSHPASS: pass } : process.env;
+
+  return await new Promise(resolve => {
+    exec(sshCmd, { timeout: 10000, env }, (error, stdout, stderr) => {
       let result;
       let okFlag;
       let detail;
       if (error) {
         okFlag = false;
         result = "error";
-        detail = error.message || stderr || "SSH command failed";
+        detail = stderr || error.message || "SSH command failed";
       } else {
         okFlag = true;
         result = "ok";
