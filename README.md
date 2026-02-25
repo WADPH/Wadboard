@@ -74,6 +74,7 @@ Wadboard supports multiple WOL / power-on methods:
 - Available for **all WOL types**, not only MikroTik
 
 ### 🖥️ Host Maintenance Commands
+- **Interactive Console**
 - Execute commands directly on the Wadboard host (e.g. Termux)
 - Useful for:
   - rebooting the dashboard device
@@ -126,6 +127,8 @@ It is **not** intended to be exposed directly to the internet without a reverse 
 - `ping` binary available in PATH
   - `iputils-ping`, `inetutils-ping` or BusyBox
 - Linux / Termux recommended
+- util-linux (`script` command for termux)
+  - Needed for Interactive Console
 
 ### Optional Integrations
 - **MikroTik RouterOS v7**
@@ -244,15 +247,25 @@ No authentication headers are required by default
 ```nginx
 server {
     listen 80;
-    server_name your.domain.local;
-
-    root /path/to/wadboard/frontend;
+    server_name wadph.top;
+    root /data/data/com.termux/files/home/Wadboard/frontend;
     index index.html;
 
     location / {
         try_files $uri $uri/ /index.html;
     }
 
+    # WebSocket terminal
+    location = /api/terminal {
+        proxy_pass http://127.0.0.1:4000/api/terminal;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # API
     location ^~ /api/ {
         proxy_pass http://127.0.0.1:4000/api/;
         proxy_http_version 1.1;
