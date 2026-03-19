@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>WADPH Dashboard</title>
+  <title>Wadboard</title>
   <link rel="icon" type="image/png" href="images/wadboard_logo.png">
   <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
 
@@ -1203,6 +1203,18 @@
     <textarea class="textarea" id="wol-notes"></textarea>
   </div>
 
+  <!-- STATUS CHECK -->
+  <div class="field">
+    <label class="label">Status check method</label>
+    <select class="input" id="wol-check-method">
+      <option value="http">HTTP</option>
+      <option value="ping">Ping</option>
+    </select>
+  </div>
+  <div class="field">
+    <label class="label" id="wol-check-label">Check URL (health probe)</label>
+    <input class="input" id="wol-check-target" placeholder="http://host.local/status" />
+  </div>
   <!-- SSH ACTIONS (ONLY FOR MIKROTIK, логика не трогаем) -->
   <div class="field" id="wol-ssh-section">
     <label class="label">SSH Actions (optional)</label>
@@ -1493,6 +1505,9 @@
   const wolHostInput     = document.getElementById("wol-host");
   const wolSshList       = document.getElementById("wol-ssh-list");
   const wolSshAddBtn     = document.getElementById("wol-ssh-add");
+  const wolCheckMethodEl = document.getElementById("wol-check-method");
+  const wolCheckLabelEl  = document.getElementById("wol-check-label");
+  const wolCheckInputEl  = document.getElementById("wol-check-target");
 
   const hostLabelInput   = document.getElementById("host-label");
   const hostCommandInput = document.getElementById("host-command");
@@ -2216,6 +2231,19 @@ batterySaveBtn.addEventListener("click", async () => {
   }
   svcMethodEl.addEventListener("change", updateSvcCheckLabel);
 
+  function updateWolCheckLabel() {
+    if (wolCheckMethodEl && wolCheckMethodEl.value === "ping") {
+      wolCheckLabelEl.textContent = "Host/IP to ping";
+      wolCheckInputEl.placeholder = "192.168.100.10";
+    } else if (wolCheckLabelEl && wolCheckInputEl) {
+      wolCheckLabelEl.textContent = "Check URL (health probe)";
+      wolCheckInputEl.placeholder = "http://host.local/status";
+    }
+  }
+  if (wolCheckMethodEl) {
+    wolCheckMethodEl.addEventListener("change", updateWolCheckLabel);
+  }
+
   function resetServiceForm() {
     document.getElementById("svc-name").value     = "";
     document.getElementById("svc-open").value     = "";
@@ -2245,6 +2273,8 @@ batterySaveBtn.addEventListener("click", async () => {
     document.getElementById("wol-pass").value   = "";
     document.getElementById("wol-script").value = "";
     document.getElementById("wol-notes").value  = "";
+    if (wolCheckMethodEl) wolCheckMethodEl.value = "http";
+    if (wolCheckInputEl) wolCheckInputEl.value = "";
     document.getElementById("wol-mac").value       = "";
     document.getElementById("wol-broadcast").value = "";
     document.getElementById("wol-port").value      = "";
@@ -2253,6 +2283,7 @@ batterySaveBtn.addEventListener("click", async () => {
     const tokEl = document.getElementById("wol-esp-token");
     if (tokEl) tokEl.value = "";
     if (typeof updateWolTypeUI === "function") updateWolTypeUI();
+    if (typeof updateWolCheckLabel === "function") updateWolCheckLabel();
     clearWolSshForm();
   }
 
@@ -2450,12 +2481,15 @@ batterySaveBtn.addEventListener("click", async () => {
           document.getElementById("wol-pass").value   = task.pass     || "";
           document.getElementById("wol-script").value = task.scriptId || "";
           document.getElementById("wol-notes").value  = task.notes    || "";
+          if (wolCheckMethodEl) wolCheckMethodEl.value = task.statusMethod || "http";
+          if (wolCheckInputEl) wolCheckInputEl.value = task.statusTarget || "";
           if (task.type === "wadesp") {
             document.getElementById("wol-esp-host").value  = task.espHost  || "";
             const tokEl = document.getElementById("wol-esp-token");
             if (tokEl) tokEl.value = task.espToken || "";
           }
           if (typeof updateWolTypeUI === "function") updateWolTypeUI();
+          if (typeof updateWolCheckLabel === "function") updateWolCheckLabel();
           clearWolSshForm();
           if (Array.isArray(task.sshActions)) {
             task.sshActions.forEach(a => {
@@ -2555,6 +2589,8 @@ formWol.addEventListener("submit", async e => {
     name: document.getElementById("wol-name").value.trim(),
     type,
     notes: document.getElementById("wol-notes").value.trim(),
+    statusMethod: wolCheckMethodEl ? wolCheckMethodEl.value : "http",
+    statusTarget: wolCheckInputEl ? wolCheckInputEl.value.trim() : "",
     sshActions: collectWolSshActions()
   };
 
@@ -3008,9 +3044,27 @@ if (brandSaveBtn) {
     const left = document.createElement("div");
     left.className = "wol-left";
 
-    const titleEl = document.createElement("div");
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "svc-name";
+
+    const titleEl = document.createElement("span");
     titleEl.className = "wol-title";
     titleEl.textContent = w.name;
+
+    const statusEl = document.createElement("span");
+    const statusText = w.lastStatus || "unknown";
+    statusEl.className = statusText === "UP" ? "chip-up" : "chip-down";
+    statusEl.textContent = statusText;
+
+    nameWrap.appendChild(titleEl);
+    nameWrap.appendChild(statusEl);
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "wol-meta";
+    const chip = `<span class="wol-chip">${w.lastResult || "never"}</span>`;
+    metaEl.innerHTML = chip + "  Last run: " + fmt(w.lastRun);
+
+    left.appendChild(nameWrap);
 
     if (w.notes) {
       const notesEl = document.createElement("div");
@@ -3019,12 +3073,6 @@ if (brandSaveBtn) {
       left.appendChild(notesEl);
     }
 
-    const metaEl = document.createElement("div");
-    metaEl.className = "wol-meta";
-    const chip = `<span class="wol-chip">${w.lastResult || "never"}</span>`;
-    metaEl.innerHTML = chip + "  Last run: " + fmt(w.lastRun);
-
-    left.appendChild(titleEl);
     left.appendChild(metaEl);
 
     const right = document.createElement("div");
@@ -3510,3 +3558,4 @@ pwdSaveBtn.addEventListener("click", async () => {
 </script>
 </body>
 </html>
+
