@@ -1,0 +1,4 @@
+.env
+*.log
+/backend/wadph-data.json
+/backend/restart-back.sh
