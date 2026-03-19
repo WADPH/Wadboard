@@ -228,6 +228,10 @@ db.wol.forEach(task => {
   if (task.notes === undefined)      task.notes = "";
   if (task.lastRun === undefined)    task.lastRun = null;
   if (task.lastResult === undefined) task.lastResult = "never";
+  if (task.statusMethod === undefined) task.statusMethod = "http";
+  if (task.statusTarget === undefined) task.statusTarget = "";
+  if (task.lastStatus === undefined)   task.lastStatus = "unknown";
+  if (task.lastChecked === undefined)  task.lastChecked = null;
 
   if (task.type === "wadesp") {
     if (task.espHost === undefined) task.espHost = "";
@@ -365,10 +369,46 @@ async function healthCheckAll() {
     for (const svc of db.services) {
       await probeService(svc);
     }
+    for (const task of db.wol) {
+      await probeWol(task);
+    }
     saveDB();
   } catch (err) {
     console.error("healthCheckAll error:", err);
   }
+}
+
+async function probeWol(task) {
+  const target = (task.statusTarget || "").trim();
+  if (!target) {
+    task.lastStatus = "unknown";
+    task.lastChecked = new Date().toISOString();
+    return;
+  }
+
+  const method = (task.statusMethod === "ping" || task.statusMethod === "http")
+    ? task.statusMethod
+    : "http";
+
+  let status = "DOWN";
+  if (method === "ping") {
+    try {
+      const alive = await pingHostOnce(target);
+      status = alive ? "UP" : "DOWN";
+    } catch {
+      status = "DOWN";
+    }
+  } else {
+    try {
+      const ok = await httpAlive(target);
+      status = ok ? "UP" : "DOWN";
+    } catch {
+      status = "DOWN";
+    }
+  }
+
+  task.lastStatus = status;
+  task.lastChecked = new Date().toISOString();
 }
 
 // -----------------------
@@ -631,6 +671,10 @@ function sanitizeForClient(isAdmin) {
   name: w.name,
   type: w.type,
   notes: w.notes || "",
+  statusMethod: w.statusMethod || "http",
+  statusTarget: w.statusTarget || "",
+  lastStatus: w.lastStatus || "unknown",
+  lastChecked: w.lastChecked || null,
   lastRun: w.lastRun || null,
   lastResult: w.lastResult || "never",
   sshActions: Array.isArray(w.sshActions)
@@ -1514,7 +1558,7 @@ app.put("/api/reorder/links", requireAdmin, (req, res) => {
 // -----------------------
 
 app.post("/api/wol", requireAdmin, (req, res) => {
-  const { name, type, notes, sshActions } = req.body || {};
+  const { name, type, notes, sshActions, statusMethod, statusTarget } = req.body || {};
   if (!name || !type) {
     return res.status(400).json({ error: "Missing required fields" });
   }
@@ -1546,6 +1590,10 @@ app.post("/api/wol", requireAdmin, (req, res) => {
     name,
     type,
     notes: notes || "",
+    statusMethod: (statusMethod === "ping" || statusMethod === "http") ? statusMethod : "http",
+    statusTarget: (statusTarget || "").trim(),
+    lastStatus: "unknown",
+    lastChecked: null,
     lastRun: null,
     lastResult: "never",
     sshActions: normalizedSshActions
@@ -1620,6 +1668,8 @@ app.put("/api/wol/:id", requireAdmin, (req, res) => {
   notes,
   sshActions,
   espHost,
+  statusMethod,
+  statusTarget,
   mac,
   broadcast,
   port,
@@ -1645,6 +1695,10 @@ if (task.type === "wadesp") {
   if (pass     !== undefined) task.pass     = pass;
   if (scriptId !== undefined) task.scriptId = scriptId;
   if (notes    !== undefined) task.notes    = notes;
+  if (statusMethod !== undefined) {
+    task.statusMethod = (statusMethod === "ping" || statusMethod === "http") ? statusMethod : "http";
+  }
+  if (statusTarget !== undefined) task.statusTarget = String(statusTarget).trim();
 
   if (sshActions !== undefined) {
     if (Array.isArray(sshActions)) {
@@ -1988,27 +2042,29 @@ wss.on("connection", (ws, req) => {
   const token = cookies.adminToken;
   const adminSession = getSessionByToken(token);
   const cap = getTerminalCapability();
+  let terminalSession = getTerminalSessionByToken(token);
 
   if (!cap.ok) {
     ws.close(1011, "terminal_unavailable");
     return;
   }
 
-  if (!adminSession && (!terminalSession || isTerminalExpired())) {
+  if (!adminSession && (!terminalSession || isTerminalExpired(terminalSession))) {
     ws.close(4401, "auth_required");
     return;
   }
 
-  if (!terminalSession || isTerminalExpired()) {
+  if (!terminalSession || isTerminalExpired(terminalSession)) {
     if (!adminSession) {
       ws.close(4401, "auth_required");
       return;
     }
-    const sess = ensureTerminalSession();
+    const sess = ensureTerminalSession(token);
     if (!sess) {
       ws.close(1011, "terminal_unavailable");
       return;
     }
+    terminalSession = sess;
   }
 
   if (!terminalSession) {
@@ -2033,7 +2089,7 @@ wss.on("connection", (ws, req) => {
       try {
         const msg = JSON.parse(text);
         if (msg && msg.type === "close") {
-          stopTerminalSession("manual");
+          stopTerminalSession(terminalSession, "manual");
         }
       } catch {
         // ignore non-json
