@@ -166,6 +166,15 @@
     outline: 2px solid var(--drag-ring);
     outline-offset: 2px;
   }
+  .icon-btn-danger {
+    background: var(--danger-bg);
+    border-color: transparent;
+    color: #fff;
+  }
+  .icon-btn-danger:hover {
+    border-color: transparent;
+    background: var(--danger-bg-hover);
+  }
 
   .btn-icon {
     width: 1.1rem;
@@ -889,6 +898,13 @@
             </svg>
             <span class="sr-only">Settings</span>
           </button>
+          <button class="icon-btn icon-btn-danger hidden" id="view-logout-btn" type="button" aria-label="Log out" title="Log out">
+            <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-8a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0V2H2v12h8v-1.5a.5.5 0 0 1 .5-.5"></path>
+              <path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708L9.854 5.646a.5.5 0 1 0-.708.708L10.293 7.5H5.5a.5.5 0 0 0 0 1h4.793l-1.147 1.146a.5.5 0 0 0 .708.708z"></path>
+            </svg>
+            <span class="sr-only">Log out</span>
+          </button>
           <button class="icon-btn hidden" id="open-modal" type="button" aria-label="Add" title="Add">
             <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true">
               <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"></path>
@@ -1004,6 +1020,13 @@
               <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"></path>
             </svg>
             <span class="sr-only">Settings</span>
+          </button>
+          <button class="icon-btn icon-btn-danger hidden" id="view-logout-health-btn" type="button" aria-label="Log out" title="Log out">
+            <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-8a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0V2H2v12h8v-1.5a.5.5 0 0 1 .5-.5"></path>
+              <path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708L9.854 5.646a.5.5 0 1 0-.708.708L10.293 7.5H5.5a.5.5 0 0 0 0 1h4.793l-1.147 1.146a.5.5 0 0 0 .708.708z"></path>
+            </svg>
+            <span class="sr-only">Log out</span>
           </button>
         </div>
       </div>
@@ -1307,6 +1330,26 @@
   </div>
 </div>
 
+<!-- View access modal (private mode gate) -->
+<div class="overlay hidden" id="access-overlay">
+  <div class="modal">
+    <div class="modal-top">
+      <div style="font-weight:800; font-size:.9rem; color:var(--text-main);">
+        Private Wadboard
+      </div>
+    </div>
+
+    <form class="form" id="access-form">
+      <div class="field">
+        <label class="label">Admin password</label>
+        <input class="input" id="access-pass" type="password" placeholder="********" required />
+      </div>
+      <button class="btn submit" type="submit" id="access-submit">Enter</button>
+      <div id="access-status" class="inline-status"></div>
+    </form>
+  </div>
+</div>
+
 <!-- Settings modal (edit mode + battery monitoring) -->
 <div class="overlay hidden" id="settings-overlay">
   <div class="modal">
@@ -1370,6 +1413,19 @@
 
   <button class="btn submit" type="button" id="brand-save-btn">Save brand text</button>
   <div id="brand-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
+</div>
+
+<div class="form" style="margin-top:1rem;">
+  <h3 style="margin-top:0;">Wadboard access</h3>
+  <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+    Public allows dashboard viewing without password. Private requires admin password before viewing.
+  </p>
+  <label style="display:flex; align-items:center; gap:.5rem; font-size:.82rem; color:var(--text-mid);">
+    <input type="checkbox" id="access-private-enabled" />
+    <span>Private mode</span>
+  </label>
+  <button class="btn submit" type="button" id="access-save-btn" style="margin-top:.6rem;">Save access mode</button>
+  <div id="access-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
 </div>
 
 
@@ -1445,6 +1501,9 @@
 
   let editMode = false;
   let state = { services: [], links: [], wol: [], hostActions: [] };
+  let privateAccessMode = false;
+  let viewAccessGranted = true;
+  let appStarted = false;
 
   // modal mode for Add/Edit forms
   let mode = { type: "service", action: "create", id: null };
@@ -1493,6 +1552,10 @@
   const adminForm      = document.getElementById("admin-form");
   const adminPassInput = document.getElementById("admin-pass");
   const adminStatusEl  = document.getElementById("admin-status");
+  const accessOverlay  = document.getElementById("access-overlay");
+  const accessForm     = document.getElementById("access-form");
+  const accessPassInput= document.getElementById("access-pass");
+  const accessStatusEl = document.getElementById("access-status");
 
   const svcMethodEl      = document.getElementById("svc-method");
   const svcCheckLabelEl  = document.getElementById("svc-check-label");
@@ -1554,6 +1617,11 @@
   const settingsLoginStatusEl = document.getElementById("settings-login-status");
   const settingsLogoutRow     = document.getElementById("settings-logout-row");
   const settingsLogoutBtn     = document.getElementById("settings-logout-btn");
+  const accessPrivateEnabledInput = document.getElementById("access-private-enabled");
+  const accessSaveBtn             = document.getElementById("access-save-btn");
+  const accessSaveStatus          = document.getElementById("access-save-status");
+  const viewLogoutBtn             = document.getElementById("view-logout-btn");
+  const viewLogoutHealthBtn       = document.getElementById("view-logout-health-btn");
 
   const terminalOverlay   = document.getElementById("terminal-overlay");
   const terminalCloseBtn  = document.getElementById("terminal-close");
@@ -1765,12 +1833,60 @@
     );
   }
 
+  function updateViewAccessButtonsVisibility() {
+    const show = !!privateAccessMode;
+    if (viewLogoutBtn) viewLogoutBtn.classList.toggle("hidden", !show);
+    if (viewLogoutHealthBtn) viewLogoutHealthBtn.classList.toggle("hidden", !show);
+  }
+
+  function showAccessOverlay(message = "") {
+    viewAccessGranted = false;
+    if (accessStatusEl) {
+      accessStatusEl.textContent = message;
+      accessStatusEl.classList.toggle("error", !!message);
+      accessStatusEl.classList.remove("success");
+    }
+    if (accessPassInput) accessPassInput.value = "";
+    if (accessOverlay) accessOverlay.classList.remove("hidden");
+    if (accessPassInput) accessPassInput.focus();
+  }
+
+  function hideAccessOverlay() {
+    if (accessOverlay) accessOverlay.classList.add("hidden");
+    if (accessStatusEl) {
+      accessStatusEl.textContent = "";
+      accessStatusEl.classList.remove("error", "success");
+    }
+  }
+
+  async function loadAccessStatus() {
+    const res = await fetch(API_BASE + "/access/status", { credentials: "include" });
+    const data = await res.json().catch(() => ({}));
+    privateAccessMode = !!data.privateMode;
+    viewAccessGranted = !!data.authorized;
+    updateViewAccessButtonsVisibility();
+    return data;
+  }
+
+  async function handleUnauthorizedResponse() {
+    try {
+      const status = await loadAccessStatus();
+      if (status.privateMode && !status.authorized) {
+        showAccessOverlay("Session expired. Please sign in again.");
+        return;
+      }
+    } catch {
+      // ignore and fallback to admin logout UI
+    }
+    forceLogoutUI();
+  }
+
   async function apiGET(path) {
     const res = await fetch(API_BASE + path, {
       credentials: "include"
     });
     if (res.status === 401) {
-      forceLogoutUI();
+      await handleUnauthorizedResponse();
       return {};
     }
     return res.json().catch(() => ({}));
@@ -1784,7 +1900,7 @@
       body: JSON.stringify(bodyObj)
     });
     if (res.status === 401) {
-      forceLogoutUI();
+      await handleUnauthorizedResponse();
       return {};
     }
     return res.json().catch(() => ({}));
@@ -1796,7 +1912,7 @@
       credentials: "include"
     });
     if (res.status === 401) {
-      forceLogoutUI();
+      await handleUnauthorizedResponse();
       return {};
     }
     return res.json().catch(() => ({}));
@@ -1808,7 +1924,7 @@
       credentials: "include"
     });
     if (res.status === 401) {
-      forceLogoutUI();
+      await handleUnauthorizedResponse();
       return {};
     }
     return res.json().catch(() => ({}));
@@ -1976,6 +2092,74 @@
   // ==============================
   // LOGIN / LOGOUT FLOW (one-shot actions)
   // ==============================
+  async function logoutViewAccess() {
+    await fetch(API_BASE + "/access/logout", {
+      method: "POST",
+      credentials: "include"
+    });
+  }
+
+  async function handleViewLogoutClick() {
+    if (!privateAccessMode) return;
+    const ok = window.confirm("Log out from Wadboard view access?");
+    if (!ok) return;
+    await logoutViewAccess();
+    showAccessOverlay("");
+  }
+
+  if (viewLogoutBtn) {
+    viewLogoutBtn.addEventListener("click", handleViewLogoutClick);
+  }
+  if (viewLogoutHealthBtn) {
+    viewLogoutHealthBtn.addEventListener("click", handleViewLogoutClick);
+  }
+
+  if (accessForm) {
+    accessForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pw = accessPassInput ? accessPassInput.value : "";
+      if (!pw) return;
+
+      if (accessStatusEl) {
+        accessStatusEl.textContent = "";
+        accessStatusEl.classList.remove("error", "success");
+      }
+
+      const res = await fetch(API_BASE + "/access/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw })
+      });
+
+      if (res.status === 200) {
+        viewAccessGranted = true;
+        hideAccessOverlay();
+        if (!appStarted) {
+          await startApp();
+        }
+        return;
+      }
+
+      const payload = await res.json().catch(() => ({}));
+      if (accessStatusEl) {
+        if (res.status === 429) {
+          const sec = Number(payload && payload.retryAfterSec);
+          accessStatusEl.textContent = Number.isFinite(sec) && sec > 0
+            ? `Too many attempts. Try again in ${sec}s.`
+            : "Too many attempts. Try again later.";
+        } else {
+          accessStatusEl.textContent = "Wrong admin password.";
+        }
+        accessStatusEl.classList.add("error");
+      }
+      if (accessPassInput) {
+        accessPassInput.value = "";
+        accessPassInput.focus();
+      }
+    });
+  }
+
   if (adminToggleBtn) {
     adminToggleBtn.addEventListener("click", () => openSettingsModal());
   }
@@ -2088,6 +2272,13 @@ async function changeAdminPassword(oldPw, newPw) {
 
 
 
+ async function loadAccessModeIntoForm() {
+    if (!accessPrivateEnabledInput) return;
+    const status = await loadAccessStatus();
+    accessPrivateEnabledInput.checked = !!status.privateMode;
+    if (accessSaveStatus) accessSaveStatus.textContent = "";
+  }
+
  async function loadBatteryConfigIntoForm() {
     if (!batteryEnabledInput) return;
     const cfg = await apiGET("/battery-alerts");
@@ -2115,6 +2306,7 @@ async function changeAdminPassword(oldPw, newPw) {
       settingsLogoutRow.classList.remove("hidden");
       adminOnlyBox.classList.remove("hidden");
       loadBrandTextIntoForm();
+      loadAccessModeIntoForm();
       loadBatteryConfigIntoForm();
     } else {
       settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
@@ -2194,6 +2386,30 @@ async function changeAdminPassword(oldPw, newPw) {
      syncSettingsUI();
      closeSettingsModal();
   });
+
+if (accessSaveBtn) {
+  accessSaveBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+    const privateMode = !!(accessPrivateEnabledInput && accessPrivateEnabledInput.checked);
+    accessSaveBtn.disabled = true;
+    if (accessSaveStatus) accessSaveStatus.textContent = "Saving...";
+    try {
+      const resp = await apiJSON("PUT", "/access/mode", { privateMode });
+      if (resp && resp.ok) {
+        privateAccessMode = !!resp.privateMode;
+        viewAccessGranted = !!resp.authorized;
+        updateViewAccessButtonsVisibility();
+        if (accessSaveStatus) accessSaveStatus.textContent = "Saved";
+      } else {
+        if (accessSaveStatus) accessSaveStatus.textContent = "Save failed";
+      }
+    } catch {
+      if (accessSaveStatus) accessSaveStatus.textContent = "Save failed";
+    } finally {
+      accessSaveBtn.disabled = false;
+    }
+  });
+}
 
 batterySaveBtn.addEventListener("click", async () => {
   if (!editMode) return;
@@ -3376,6 +3592,10 @@ if (brandSaveBtn) {
 
   async function loadHealthOnce() {
     const res = await fetch("/api/health", { cache: "no-store" });
+    if (res.status === 401) {
+      await handleUnauthorizedResponse();
+      throw new Error("access_required");
+    }
     const j = await res.json().catch(() => null);
     if (!res.ok || !j || !j.ok) {
       throw new Error((j && j.error) ? j.error : `HTTP ${res.status}`);
@@ -3457,6 +3677,7 @@ if (brandSaveBtn) {
         setHint(healthSysNoteEl, data.battery?.hint || "");
       }
     } catch (e) {
+      if (e && e.message === "access_required") return;
       showHealthError(`Health API unavailable: ${e && e.message ? e.message : e}`);
     }
   }
@@ -3484,7 +3705,10 @@ if (brandSaveBtn) {
   // ==============================
   // INIT
   // ==============================
-  (async function init() {
+  async function startApp() {
+    if (appStarted) return;
+    appStarted = true;
+
     await refreshBrandTextFromServer();
 
     if (isHealthRoute) {
@@ -3497,17 +3721,15 @@ if (brandSaveBtn) {
     openBtn.classList.add("hidden");
     // updateBatteryFormDisabled();
 
-
-const adminStatus = await fetch("/api/admin/status").then(r => r.json());
-
-if (!adminStatus.initialized) {
-  adminOverlay.classList.remove("hidden");
-  adminPassInput.placeholder = "Set admin password";
-  if (adminStatusEl) {
-    adminStatusEl.textContent = "Set a new admin password (min 6 characters).";
-    adminStatusEl.classList.remove("error");
-  }
-}
+    const adminStatus = await fetch("/api/admin/status").then(r => r.json());
+    if (!adminStatus.initialized) {
+      adminOverlay.classList.remove("hidden");
+      adminPassInput.placeholder = "Set admin password";
+      if (adminStatusEl) {
+        adminStatusEl.textContent = "Set a new admin password (min 6 characters).";
+        adminStatusEl.classList.remove("error");
+      }
+    }
 
 
     await loadStateFromServer();
@@ -3515,6 +3737,16 @@ if (!adminStatus.initialized) {
 
     setInterval(refreshLoop, 10000);
     setInterval(loadHostInfo, 60000);
+  }
+
+  (async function init() {
+    const status = await loadAccessStatus();
+    if (status.privateMode && !status.authorized) {
+      showAccessOverlay("");
+      return;
+    }
+    hideAccessOverlay();
+    await startApp();
   })();
 
 

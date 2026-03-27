@@ -66,10 +66,21 @@ const DATA_FILE = path.join(__dirname, "wadph-data.json");
 // -----------------------
 const sessions = {}; // { token: { createdAt: number } }
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const VIEW_SESSIONS = {}; // { token: { createdAt: number } }
+const VIEW_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 days
+const ACCESS_ATTEMPTS = {}; // { ip: { count: number, lockedUntil: number } }
+const ACCESS_MAX_ATTEMPTS = 10;
+const ACCESS_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
 function createSession() {
   const token = crypto.randomBytes(32).toString("hex");
   sessions[token] = { createdAt: Date.now() };
+  return token;
+}
+
+function createViewSession() {
+  const token = crypto.randomBytes(32).toString("hex");
+  VIEW_SESSIONS[token] = { createdAt: Date.now() };
   return token;
 }
 
@@ -97,12 +108,102 @@ function getSessionByToken(token) {
   return { token, createdAt: sess.createdAt };
 }
 
+function getViewSession(req) {
+  const token = req.cookies.viewToken;
+  if (!token) return null;
+  const sess = VIEW_SESSIONS[token];
+  if (!sess) return null;
+  if (Date.now() - sess.createdAt > VIEW_SESSION_TTL_MS) {
+    delete VIEW_SESSIONS[token];
+    return null;
+  }
+  return { token, createdAt: sess.createdAt };
+}
+
+function getClientIp(req) {
+  const xfwd = req.headers["x-forwarded-for"];
+  if (typeof xfwd === "string" && xfwd.trim()) {
+    return xfwd.split(",")[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function getAccessAttemptState(req) {
+  const ip = getClientIp(req);
+  if (!ACCESS_ATTEMPTS[ip]) {
+    ACCESS_ATTEMPTS[ip] = { count: 0, lockedUntil: 0 };
+  }
+  return ACCESS_ATTEMPTS[ip];
+}
+
+function getAccessLockRemainingMs(req) {
+  const state = getAccessAttemptState(req);
+  const now = Date.now();
+  if (state.lockedUntil > now) {
+    return state.lockedUntil - now;
+  }
+  if (state.lockedUntil) {
+    state.lockedUntil = 0;
+  }
+  return 0;
+}
+
+function registerAccessFailure(req) {
+  const state = getAccessAttemptState(req);
+  const now = Date.now();
+  if (state.lockedUntil > now) return;
+  state.count += 1;
+  if (state.count >= ACCESS_MAX_ATTEMPTS) {
+    state.count = 0;
+    state.lockedUntil = now + ACCESS_LOCK_MS;
+  }
+}
+
+function clearAccessFailures(req) {
+  const state = getAccessAttemptState(req);
+  state.count = 0;
+  state.lockedUntil = 0;
+}
+
+function setViewAccessCookie(res, token) {
+  res.cookie("viewToken", token, {
+    httpOnly: true,
+    sameSite: "strict",
+    maxAge: VIEW_SESSION_TTL_MS,
+    secure: false
+  });
+}
+
+function clearViewAccessCookie(res) {
+  res.clearCookie("viewToken", {
+    sameSite: "strict",
+    secure: false
+  });
+}
+
 function requireAdmin(req, res, next) {
   const s = getSession(req);
   if (!s) {
     return res.status(401).json({ error: "unauthorized" });
   }
   req.sessionToken = s.token;
+  next();
+}
+
+function isPrivateModeEnabled() {
+  ensureConfigStructure();
+  return !!db.config.privateMode;
+}
+
+function hasViewAccess(req) {
+  if (!isPrivateModeEnabled()) return true;
+  return !!getViewSession(req);
+}
+
+function requireViewAccess(req, res, next) {
+  if (!hasViewAccess(req)) {
+    return res.status(401).json({ error: "access_required" });
+  }
   next();
 }
 
@@ -136,7 +237,8 @@ let db = {
   hostActions: [],
   config: {
     batteryAlerts: defaultBatteryAlertsConfig(),
-    brandText: ""
+    brandText: "",
+    privateMode: false
   },
   admin: {
     passwordHash: null, // <-- ВАЖНО
@@ -181,6 +283,9 @@ function ensureConfigStructure() {
 
   if (typeof db.config.brandText !== "string") {
     db.config.brandText = "";
+  }
+  if (typeof db.config.privateMode !== "boolean") {
+    db.config.privateMode = false;
   }
 
 if (!db.admin || typeof db.admin !== "object") {
@@ -268,7 +373,9 @@ db.wol.forEach(task => {
       wol: [],
       hostActions: [],
       config: {
-        batteryAlerts: defaultBatteryAlertsConfig()
+        batteryAlerts: defaultBatteryAlertsConfig(),
+        brandText: "",
+        privateMode: false
       }
     };
   }
@@ -878,8 +985,8 @@ setInterval(() => {
   pollHostInfoOnce().catch(() => {});
 }, 60_000);
 
-// public read-only endpoint
-app.get("/api/hostinfo", (req, res) => {
+// read-only endpoint
+app.get("/api/hostinfo", requireViewAccess, (req, res) => {
   res.json(hostInfo);
 });
 
@@ -1202,7 +1309,7 @@ async function getBatteryInfo() {
   };
 }
 
-app.get("/api/health", async (req, res) => {
+app.get("/api/health", requireViewAccess, async (req, res) => {
   try {
     const cpuUsage = await getCpuUsage();
     const totalBytes = os.totalmem();
@@ -1301,7 +1408,7 @@ app.put("/api/battery-alerts", requireAdmin, (req, res) => {
 // -----------------------
 // Brand text endpoints
 // -----------------------
-app.get("/api/brand-text", (req, res) => {
+app.get("/api/brand-text", requireViewAccess, (req, res) => {
   const cfg = getBrandTextConfig();
   res.json({ text: cfg.text, custom: cfg.custom });
 });
@@ -1314,6 +1421,67 @@ app.put("/api/brand-text", requireAdmin, (req, res) => {
   saveDB();
   const cfg = getBrandTextConfig();
   res.json({ ok: true, text: cfg.text, custom: cfg.custom });
+});
+
+app.get("/api/access/status", (req, res) => {
+  const privateMode = isPrivateModeEnabled();
+  const authorized = privateMode ? !!getViewSession(req) : true;
+  res.json({ privateMode, authorized });
+});
+
+app.post("/api/access/login", (req, res) => {
+  const waitMs = getAccessLockRemainingMs(req);
+  if (waitMs > 0) {
+    return res.status(429).json({
+      error: "too_many_attempts",
+      retryAfterSec: Math.ceil(waitMs / 1000)
+    });
+  }
+
+  const { password } = req.body || {};
+  if (!password || !checkPassword(password)) {
+    registerAccessFailure(req);
+    const nowWaitMs = getAccessLockRemainingMs(req);
+    if (nowWaitMs > 0) {
+      return res.status(429).json({
+        error: "too_many_attempts",
+        retryAfterSec: Math.ceil(nowWaitMs / 1000)
+      });
+    }
+    return res.status(401).json({ error: "bad_password" });
+  }
+
+  clearAccessFailures(req);
+  const token = createViewSession();
+  setViewAccessCookie(res, token);
+  return res.json({ ok: true });
+});
+
+app.post("/api/access/logout", (req, res) => {
+  const token = req.cookies.viewToken;
+  if (token) {
+    delete VIEW_SESSIONS[token];
+  }
+  clearViewAccessCookie(res);
+  return res.json({ ok: true });
+});
+
+app.put("/api/access/mode", requireAdmin, (req, res) => {
+  ensureConfigStructure();
+  const privateMode = !!(req.body && req.body.privateMode);
+  db.config.privateMode = privateMode;
+  saveDB();
+
+  if (privateMode) {
+    const token = createViewSession();
+    setViewAccessCookie(res, token);
+  } else {
+    const token = req.cookies.viewToken;
+    if (token) delete VIEW_SESSIONS[token];
+    clearViewAccessCookie(res);
+  }
+
+  res.json({ ok: true, privateMode, authorized: true });
 });
 
 // -----------------------
@@ -1346,6 +1514,11 @@ if (!db.admin.initialized) {
     maxAge: SESSION_TTL_MS,
     secure: false
   });
+
+  if (isPrivateModeEnabled()) {
+    const viewToken = createViewSession();
+    setViewAccessCookie(res, viewToken);
+  }
 
   return res.json({ ok: true });
 });
@@ -1396,7 +1569,7 @@ app.post("/api/logout", (req, res) => {
 // -----------------------
 // Read-only state
 // -----------------------
-app.get("/api/state", (req, res) => {
+app.get("/api/state", requireViewAccess, (req, res) => {
   const isAdmin = !!getSession(req);
   res.json(sanitizeForClient(isAdmin));
 });
@@ -1404,7 +1577,7 @@ app.get("/api/state", (req, res) => {
 // -----------------------
 // Manual refresh endpoint
 // -----------------------
-app.post("/api/refresh", async (req, res) => {
+app.post("/api/refresh", requireViewAccess, async (req, res) => {
   try {
     await healthCheckAll();
     await pollHostInfoOnce();
