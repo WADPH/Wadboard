@@ -175,6 +175,86 @@
     border-color: transparent;
     background: var(--danger-bg-hover);
   }
+  .switch-row {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    margin-top: .2rem;
+    user-select: none;
+  }
+  .switch-side {
+    font-size: .78rem;
+    color: var(--text-dim);
+    font-weight: 700;
+  }
+  .switch-side.active {
+    color: var(--text-main);
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-dim) 28%, transparent);
+    border: 1px solid var(--border);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+  .switch-thumb {
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: transform var(--transition-fast);
+  }
+  .switch input:checked + .switch-track {
+    background: color-mix(in srgb, var(--btn-bg) 82%, #000 18%);
+    border-color: color-mix(in srgb, var(--btn-bg) 55%, var(--border) 45%);
+  }
+  .switch input:checked + .switch-track .switch-thumb {
+    transform: translateX(24px);
+  }
+  .switch input:focus-visible + .switch-track {
+    outline: 2px solid var(--drag-ring);
+    outline-offset: 2px;
+  }
+  .sessions-box {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    margin-top: .6rem;
+  }
+  .session-item {
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    border-radius: var(--radius-xl);
+    padding: .65rem .75rem;
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    align-items: center;
+  }
+  .session-meta {
+    font-size: .76rem;
+    color: var(--text-mid);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem .75rem;
+  }
 
   .btn-icon {
     width: 1.1rem;
@@ -1335,7 +1415,7 @@
   <div class="modal">
     <div class="modal-top">
       <div style="font-weight:800; font-size:.9rem; color:var(--text-main);">
-        Private Wadboard
+        Admin password is required
       </div>
     </div>
 
@@ -1420,11 +1500,14 @@
   <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
     Public allows dashboard viewing without password. Private requires admin password before viewing.
   </p>
-  <label style="display:flex; align-items:center; gap:.5rem; font-size:.82rem; color:var(--text-mid);">
-    <input type="checkbox" id="access-private-enabled" />
-    <span>Private mode</span>
-  </label>
-  <button class="btn submit" type="button" id="access-save-btn" style="margin-top:.6rem;">Save access mode</button>
+  <div class="switch-row">
+    <span class="switch-side" id="access-public-label">Public</span>
+    <label class="switch" for="access-private-enabled">
+      <input type="checkbox" id="access-private-enabled" />
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </label>
+    <span class="switch-side" id="access-private-label">Private</span>
+  </div>
   <div id="access-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
 </div>
 
@@ -1432,11 +1515,15 @@
     <div class="form" style="margin-top:1rem;">
       <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
         <span>Battery monitoring</span>
-        <label style="display:flex; align-items:center; gap:.4rem; font-size:.8rem; color:var(--text-mid);">
-          <input type="checkbox" id="battery-enabled" />
-          <span>Enabled</span>
-        </label>
       </h3>
+      <div class="switch-row">
+        <span class="switch-side" id="battery-disabled-label">Disabled</span>
+        <label class="switch" for="battery-enabled">
+          <input type="checkbox" id="battery-enabled" />
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+        <span class="switch-side" id="battery-enabled-label">Enabled</span>
+      </div>
       <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
         Only for Termux host with <b>termux-api</b> installed. Alerts are sent when battery percentage
         drops below configured levels.
@@ -1463,6 +1550,19 @@
       <button class="btn submit" type="button" id="battery-save-btn">Save battery settings</button>
       <div id="battery-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
     </div>
+
+    <details class="form" style="margin-top:1rem;">
+      <summary style="cursor:pointer; font-weight:700; color:var(--text-main);">View sessions</summary>
+      <p style="margin:.6rem 0 .6rem; font-size:.76rem; color:var(--text-dim);">
+        Active private-mode sessions. You can revoke any session or all other sessions.
+      </p>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button class="btn" type="button" id="view-sessions-refresh-btn">Refresh</button>
+        <button class="btn btn-danger" type="button" id="view-sessions-revoke-others-btn">Revoke others</button>
+      </div>
+      <div id="view-sessions-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
+      <div id="view-sessions-list" class="sessions-box"></div>
+    </details>
   </div>
 </div>
 </div>
@@ -1504,6 +1604,7 @@
   let privateAccessMode = false;
   let viewAccessGranted = true;
   let appStarted = false;
+  let isSyncingAccessSwitch = false;
 
   // modal mode for Add/Edit forms
   let mode = { type: "service", action: "create", id: null };
@@ -1618,10 +1719,15 @@
   const settingsLogoutRow     = document.getElementById("settings-logout-row");
   const settingsLogoutBtn     = document.getElementById("settings-logout-btn");
   const accessPrivateEnabledInput = document.getElementById("access-private-enabled");
-  const accessSaveBtn             = document.getElementById("access-save-btn");
   const accessSaveStatus          = document.getElementById("access-save-status");
+  const accessPublicLabel         = document.getElementById("access-public-label");
+  const accessPrivateLabel        = document.getElementById("access-private-label");
   const viewLogoutBtn             = document.getElementById("view-logout-btn");
   const viewLogoutHealthBtn       = document.getElementById("view-logout-health-btn");
+  const viewSessionsRefreshBtn    = document.getElementById("view-sessions-refresh-btn");
+  const viewSessionsRevokeOthersBtn = document.getElementById("view-sessions-revoke-others-btn");
+  const viewSessionsStatusEl      = document.getElementById("view-sessions-status");
+  const viewSessionsListEl        = document.getElementById("view-sessions-list");
 
   const terminalOverlay   = document.getElementById("terminal-overlay");
   const terminalCloseBtn  = document.getElementById("terminal-close");
@@ -1634,6 +1740,8 @@
   const brandSaveStatus       = document.getElementById("brand-save-status");
 
   const batteryEnabledInput   = document.getElementById("battery-enabled");
+  const batteryDisabledLabel  = document.getElementById("battery-disabled-label");
+  const batteryEnabledLabel   = document.getElementById("battery-enabled-label");
   const batteryLevelsInput    = document.getElementById("battery-levels");
   const batteryBotTokenInput  = document.getElementById("battery-bot-token");
   const batteryChatIdInput    = document.getElementById("battery-chat-id");
@@ -1671,6 +1779,7 @@
     }
   }
   applyTheme(loadTheme());
+  syncSwitchLabelStates();
 
   function sanitizeBrandText(value) {
     const s = String(value == null ? "" : value);
@@ -1837,6 +1946,16 @@
     const show = !!privateAccessMode;
     if (viewLogoutBtn) viewLogoutBtn.classList.toggle("hidden", !show);
     if (viewLogoutHealthBtn) viewLogoutHealthBtn.classList.toggle("hidden", !show);
+  }
+
+  function syncSwitchLabelStates() {
+    const accessPrivateOn = !!(accessPrivateEnabledInput && accessPrivateEnabledInput.checked);
+    if (accessPublicLabel) accessPublicLabel.classList.toggle("active", !accessPrivateOn);
+    if (accessPrivateLabel) accessPrivateLabel.classList.toggle("active", accessPrivateOn);
+
+    const batteryOn = !!(batteryEnabledInput && batteryEnabledInput.checked);
+    if (batteryDisabledLabel) batteryDisabledLabel.classList.toggle("active", !batteryOn);
+    if (batteryEnabledLabel) batteryEnabledLabel.classList.toggle("active", batteryOn);
   }
 
   function showAccessOverlay(message = "") {
@@ -2275,7 +2394,10 @@ async function changeAdminPassword(oldPw, newPw) {
  async function loadAccessModeIntoForm() {
     if (!accessPrivateEnabledInput) return;
     const status = await loadAccessStatus();
+    isSyncingAccessSwitch = true;
     accessPrivateEnabledInput.checked = !!status.privateMode;
+    isSyncingAccessSwitch = false;
+    syncSwitchLabelStates();
     if (accessSaveStatus) accessSaveStatus.textContent = "";
   }
 
@@ -2292,7 +2414,114 @@ async function changeAdminPassword(oldPw, newPw) {
     }
     batteryBotTokenInput.value = cfg.telegramBotToken || "";
     batteryChatIdInput.value = cfg.telegramChatId || "";
+    syncSwitchLabelStates();
     batterySaveStatus.textContent = "";
+  }
+
+  function formatSessionTime(ts) {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    return new Date(n).toLocaleString();
+  }
+
+  function setViewSessionsStatus(text) {
+    if (viewSessionsStatusEl) viewSessionsStatusEl.textContent = text || "";
+  }
+
+  function clearViewSessionsList() {
+    if (!viewSessionsListEl) return;
+    viewSessionsListEl.innerHTML = "";
+  }
+
+  function renderViewSessionsList(items) {
+    if (!viewSessionsListEl) return;
+    viewSessionsListEl.innerHTML = "";
+
+    if (!Array.isArray(items) || items.length === 0) {
+      const empty = document.createElement("div");
+      empty.style.fontSize = ".76rem";
+      empty.style.color = "var(--text-dim)";
+      empty.textContent = "No active view sessions.";
+      viewSessionsListEl.appendChild(empty);
+      return;
+    }
+
+    for (const s of items) {
+      const row = document.createElement("div");
+      row.className = "session-item";
+
+      const left = document.createElement("div");
+      left.style.minWidth = "0";
+
+      const title = document.createElement("div");
+      title.style.fontWeight = "700";
+      title.style.fontSize = ".82rem";
+      title.style.color = "var(--text-main)";
+      title.textContent = `${s.browser || "Unknown"} on ${s.os || "Unknown"}${s.current ? " (Current)" : ""}`;
+
+      const meta = document.createElement("div");
+      meta.className = "session-meta";
+
+      const ip = document.createElement("span");
+      ip.textContent = `IP: ${s.ip || "unknown"}`;
+      const created = document.createElement("span");
+      created.textContent = `Created: ${formatSessionTime(s.createdAt)}`;
+      const lastSeen = document.createElement("span");
+      lastSeen.textContent = `Last seen: ${formatSessionTime(s.lastSeenAt)}`;
+      const lang = document.createElement("span");
+      lang.textContent = `Lang: ${s.language || "—"}`;
+      const token = document.createElement("span");
+      token.textContent = `Session: ${s.tokenPreview || "—"}`;
+
+      meta.appendChild(ip);
+      meta.appendChild(created);
+      meta.appendChild(lastSeen);
+      meta.appendChild(lang);
+      meta.appendChild(token);
+
+      left.appendChild(title);
+      left.appendChild(meta);
+
+      const revokeBtn = document.createElement("button");
+      revokeBtn.className = "btn btn-danger";
+      revokeBtn.type = "button";
+      revokeBtn.textContent = "Revoke";
+      revokeBtn.addEventListener("click", async () => {
+        const ok = window.confirm(s.current
+          ? "Revoke current session and lock this browser out of view mode?"
+          : "Revoke this view session?");
+        if (!ok) return;
+        const resp = await apiDELETE("/access/sessions/" + encodeURIComponent(s.token));
+        if (resp && resp.ok) {
+          if (resp.revokedCurrent) {
+            closeSettingsModal();
+            showAccessOverlay("Session revoked. Please sign in again.");
+            return;
+          }
+          setViewSessionsStatus("Session revoked.");
+          await loadViewSessionsIntoForm();
+        } else {
+          setViewSessionsStatus("Failed to revoke session.");
+        }
+      });
+
+      row.appendChild(left);
+      row.appendChild(revokeBtn);
+      viewSessionsListEl.appendChild(row);
+    }
+  }
+
+  async function loadViewSessionsIntoForm() {
+    if (!viewSessionsListEl) return;
+    setViewSessionsStatus("Loading...");
+    const data = await apiGET("/access/sessions");
+    if (!data || !data.ok) {
+      clearViewSessionsList();
+      setViewSessionsStatus("Unable to load sessions.");
+      return;
+    }
+    renderViewSessionsList(data.sessions || []);
+    setViewSessionsStatus("");
   }
 
   function openSettingsModal() {
@@ -2308,6 +2537,7 @@ async function changeAdminPassword(oldPw, newPw) {
       loadBrandTextIntoForm();
       loadAccessModeIntoForm();
       loadBatteryConfigIntoForm();
+      loadViewSessionsIntoForm();
     } else {
       settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
       settingsLoginForm.classList.remove("hidden");
@@ -2357,8 +2587,10 @@ async function changeAdminPassword(oldPw, newPw) {
       syncSettingsUI();
 
       await loadStateFromServer();
+      await loadAccessModeIntoForm();
       // updateBatteryFormDisabled();
       await loadBatteryConfigIntoForm();
+      await loadViewSessionsIntoForm();
     } else {
       const payload = await res.json().catch(() => ({}));
       const err = payload && payload.error ? payload.error : "bad_password";
@@ -2387,11 +2619,19 @@ async function changeAdminPassword(oldPw, newPw) {
      closeSettingsModal();
   });
 
-if (accessSaveBtn) {
-  accessSaveBtn.addEventListener("click", async () => {
-    if (!editMode) return;
-    const privateMode = !!(accessPrivateEnabledInput && accessPrivateEnabledInput.checked);
-    accessSaveBtn.disabled = true;
+if (accessPrivateEnabledInput) {
+  accessPrivateEnabledInput.addEventListener("change", async () => {
+    syncSwitchLabelStates();
+    if (isSyncingAccessSwitch) return;
+    if (!editMode) {
+      isSyncingAccessSwitch = true;
+      accessPrivateEnabledInput.checked = privateAccessMode;
+      isSyncingAccessSwitch = false;
+      syncSwitchLabelStates();
+      return;
+    }
+
+    const privateMode = !!accessPrivateEnabledInput.checked;
     if (accessSaveStatus) accessSaveStatus.textContent = "Saving...";
     try {
       const resp = await apiJSON("PUT", "/access/mode", { privateMode });
@@ -2401,12 +2641,41 @@ if (accessSaveBtn) {
         updateViewAccessButtonsVisibility();
         if (accessSaveStatus) accessSaveStatus.textContent = "Saved";
       } else {
-        if (accessSaveStatus) accessSaveStatus.textContent = "Save failed";
+        throw new Error("save_failed");
       }
     } catch {
+      isSyncingAccessSwitch = true;
+      accessPrivateEnabledInput.checked = privateAccessMode;
+      isSyncingAccessSwitch = false;
+      syncSwitchLabelStates();
       if (accessSaveStatus) accessSaveStatus.textContent = "Save failed";
-    } finally {
-      accessSaveBtn.disabled = false;
+    }
+  });
+}
+
+if (batteryEnabledInput) {
+  batteryEnabledInput.addEventListener("change", () => {
+    syncSwitchLabelStates();
+  });
+}
+
+if (viewSessionsRefreshBtn) {
+  viewSessionsRefreshBtn.addEventListener("click", async () => {
+    await loadViewSessionsIntoForm();
+  });
+}
+
+if (viewSessionsRevokeOthersBtn) {
+  viewSessionsRevokeOthersBtn.addEventListener("click", async () => {
+    const ok = window.confirm("Revoke all other view sessions?");
+    if (!ok) return;
+    setViewSessionsStatus("Revoking...");
+    const resp = await apiPOSTNoBody("/access/sessions/revoke-others");
+    if (resp && resp.ok) {
+      setViewSessionsStatus("Other sessions revoked.");
+      await loadViewSessionsIntoForm();
+    } else {
+      setViewSessionsStatus("Failed to revoke other sessions.");
     }
   });
 }

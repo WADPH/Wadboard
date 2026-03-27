@@ -66,7 +66,7 @@ const DATA_FILE = path.join(__dirname, "wadph-data.json");
 // -----------------------
 const sessions = {}; // { token: { createdAt: number } }
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
-const VIEW_SESSIONS = {}; // { token: { createdAt: number } }
+const VIEW_SESSIONS = {}; // { token: { createdAt, lastSeenAt, ip, userAgent, acceptLanguage } }
 const VIEW_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 days
 const ACCESS_ATTEMPTS = {}; // { ip: { count: number, lockedUntil: number } }
 const ACCESS_MAX_ATTEMPTS = 10;
@@ -78,9 +78,16 @@ function createSession() {
   return token;
 }
 
-function createViewSession() {
+function createViewSession(req) {
   const token = crypto.randomBytes(32).toString("hex");
-  VIEW_SESSIONS[token] = { createdAt: Date.now() };
+  const now = Date.now();
+  VIEW_SESSIONS[token] = {
+    createdAt: now,
+    lastSeenAt: now,
+    ip: getClientIp(req),
+    userAgent: String(req && req.headers && req.headers["user-agent"] ? req.headers["user-agent"] : ""),
+    acceptLanguage: String(req && req.headers && req.headers["accept-language"] ? req.headers["accept-language"] : "")
+  };
   return token;
 }
 
@@ -117,7 +124,8 @@ function getViewSession(req) {
     delete VIEW_SESSIONS[token];
     return null;
   }
-  return { token, createdAt: sess.createdAt };
+  sess.lastSeenAt = Date.now();
+  return { token, ...sess };
 }
 
 function getClientIp(req) {
@@ -125,7 +133,39 @@ function getClientIp(req) {
   if (typeof xfwd === "string" && xfwd.trim()) {
     return xfwd.split(",")[0].trim();
   }
-  return req.ip || req.socket?.remoteAddress || "unknown";
+  const raw = req.ip || req.socket?.remoteAddress || "unknown";
+  return String(raw).replace(/^::ffff:/, "");
+}
+
+function cleanupExpiredViewSessions() {
+  const now = Date.now();
+  for (const [token, sess] of Object.entries(VIEW_SESSIONS)) {
+    if (!sess || now - sess.createdAt > VIEW_SESSION_TTL_MS) {
+      delete VIEW_SESSIONS[token];
+    }
+  }
+}
+
+function parseBrowserFromUA(uaRaw) {
+  const ua = String(uaRaw || "");
+  if (!ua) return "Unknown browser";
+  if (ua.includes("Edg/")) return "Microsoft Edge";
+  if (ua.includes("OPR/") || ua.includes("Opera")) return "Opera";
+  if (ua.includes("Chrome/") && !ua.includes("Edg/")) return "Chrome";
+  if (ua.includes("Firefox/")) return "Firefox";
+  if (ua.includes("Safari/") && ua.includes("Version/") && !ua.includes("Chrome/")) return "Safari";
+  return "Unknown browser";
+}
+
+function parseOsFromUA(uaRaw) {
+  const ua = String(uaRaw || "");
+  if (!ua) return "Unknown OS";
+  if (ua.includes("Windows NT")) return "Windows";
+  if (ua.includes("Android")) return "Android";
+  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS";
+  if (ua.includes("Mac OS X")) return "macOS";
+  if (ua.includes("Linux")) return "Linux";
+  return "Unknown OS";
 }
 
 function getAccessAttemptState(req) {
@@ -1452,7 +1492,7 @@ app.post("/api/access/login", (req, res) => {
   }
 
   clearAccessFailures(req);
-  const token = createViewSession();
+  const token = createViewSession(req);
   setViewAccessCookie(res, token);
   return res.json({ ok: true });
 });
@@ -1473,7 +1513,7 @@ app.put("/api/access/mode", requireAdmin, (req, res) => {
   saveDB();
 
   if (privateMode) {
-    const token = createViewSession();
+    const token = createViewSession(req);
     setViewAccessCookie(res, token);
   } else {
     const token = req.cookies.viewToken;
@@ -1482,6 +1522,58 @@ app.put("/api/access/mode", requireAdmin, (req, res) => {
   }
 
   res.json({ ok: true, privateMode, authorized: true });
+});
+
+app.get("/api/access/sessions", requireAdmin, (req, res) => {
+  cleanupExpiredViewSessions();
+  const currentToken = String(req.cookies.viewToken || "");
+  const sessions = Object.entries(VIEW_SESSIONS)
+    .map(([token, sess]) => ({
+      token,
+      tokenPreview: `${token.slice(0, 8)}...${token.slice(-6)}`,
+      current: token === currentToken,
+      createdAt: sess.createdAt,
+      lastSeenAt: sess.lastSeenAt || sess.createdAt,
+      ip: sess.ip || "unknown",
+      browser: parseBrowserFromUA(sess.userAgent),
+      os: parseOsFromUA(sess.userAgent),
+      userAgent: String(sess.userAgent || ""),
+      language: String(sess.acceptLanguage || "").split(",")[0] || ""
+    }))
+    .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+
+  res.json({
+    ok: true,
+    privateMode: isPrivateModeEnabled(),
+    sessions
+  });
+});
+
+app.delete("/api/access/sessions/:token", requireAdmin, (req, res) => {
+  cleanupExpiredViewSessions();
+  const token = String(req.params.token || "");
+  const currentToken = String(req.cookies.viewToken || "");
+  if (!token || !VIEW_SESSIONS[token]) {
+    return res.status(404).json({ error: "session_not_found" });
+  }
+
+  delete VIEW_SESSIONS[token];
+  if (token === currentToken) {
+    clearViewAccessCookie(res);
+    return res.json({ ok: true, revokedCurrent: true });
+  }
+  return res.json({ ok: true, revokedCurrent: false });
+});
+
+app.post("/api/access/sessions/revoke-others", requireAdmin, (req, res) => {
+  cleanupExpiredViewSessions();
+  const currentToken = String(req.cookies.viewToken || "");
+  for (const token of Object.keys(VIEW_SESSIONS)) {
+    if (!currentToken || token !== currentToken) {
+      delete VIEW_SESSIONS[token];
+    }
+  }
+  return res.json({ ok: true });
 });
 
 // -----------------------
@@ -1516,7 +1608,7 @@ if (!db.admin.initialized) {
   });
 
   if (isPrivateModeEnabled()) {
-    const viewToken = createViewSession();
+    const viewToken = createViewSession(req);
     setViewAccessCookie(res, viewToken);
   }
 
