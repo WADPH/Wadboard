@@ -728,7 +728,20 @@
     display: flex;
     flex-wrap: wrap;
     gap: .5rem;
-    margin-bottom: .25rem;
+    margin-bottom: .55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface-alt);
+    padding: .65rem;
+  }
+  .ssh-row-title {
+    flex: 1 1 100%;
+    font-size: .76rem;
+    font-weight: 800;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .4rem;
+    margin-bottom: .1rem;
   }
   .ssh-row .ssh-input {
     flex: 1 1 160px;
@@ -2774,6 +2787,7 @@ batterySaveBtn.addEventListener("click", async () => {
 
   function clearWolSshForm() {
     wolSshList.innerHTML = "";
+    renumberWolSshRows();
   }
 
   function resetWolForm() {
@@ -2856,6 +2870,9 @@ batterySaveBtn.addEventListener("click", async () => {
   function createWolSshRow(action) {
     const row = document.createElement("div");
     row.className = "ssh-row";
+    const title = document.createElement("div");
+    title.className = "ssh-row-title";
+    title.textContent = "SSH Action";
 
     // SSH action inputs (label/user/host/pass/command)
     const labelInput = document.createElement("input");
@@ -2904,8 +2921,12 @@ batterySaveBtn.addEventListener("click", async () => {
     removeBtn.type = "button";
     removeBtn.className = "btn btn-danger";
     removeBtn.textContent = "Remove";
-    removeBtn.onclick = () => row.remove();
+    removeBtn.onclick = () => {
+      row.remove();
+      renumberWolSshRows();
+    };
 
+    row.appendChild(title);
     row.appendChild(labelInput);
     row.appendChild(userInput);
     row.appendChild(hostInput);
@@ -2917,9 +2938,18 @@ batterySaveBtn.addEventListener("click", async () => {
     return row;
   }
 
+  function renumberWolSshRows() {
+    const rows = wolSshList.querySelectorAll(".ssh-row");
+    rows.forEach((row, idx) => {
+      const titleEl = row.querySelector(".ssh-row-title");
+      if (titleEl) titleEl.textContent = `SSH Action #${idx + 1}`;
+    });
+  }
+
   wolSshAddBtn.addEventListener("click", () => {
     const row = createWolSshRow({ host: wolHostInput.value.trim() });
     wolSshList.appendChild(row);
+    renumberWolSshRows();
   });
 
   function collectWolSshActions() {
@@ -3008,6 +3038,7 @@ batterySaveBtn.addEventListener("click", async () => {
               const row = createWolSshRow(a);
               wolSshList.appendChild(row);
             });
+            renumberWolSshRows();
           }
         }
       } else {
