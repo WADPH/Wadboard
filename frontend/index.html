@@ -1496,18 +1496,16 @@
 </div>
 
 <div class="form" style="margin-top:1rem;">
-  <h3 style="margin-top:0;">Wadboard access</h3>
-  <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
-    Public allows dashboard viewing without password. Private requires admin password before viewing.
-  </p>
-  <div class="switch-row">
-    <span class="switch-side" id="access-public-label">Public</span>
+  <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+    <span>Private mode</span>
     <label class="switch" for="access-private-enabled">
       <input type="checkbox" id="access-private-enabled" />
       <span class="switch-track"><span class="switch-thumb"></span></span>
     </label>
-    <span class="switch-side" id="access-private-label">Private</span>
-  </div>
+  </h3>
+  <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+    Off: anyone who opens Wadboard can view dashboard data. On: Wadboard asks for admin password before showing the dashboard.
+  </p>
   <div id="access-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
 </div>
 
@@ -1515,15 +1513,11 @@
     <div class="form" style="margin-top:1rem;">
       <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
         <span>Battery monitoring</span>
-      </h3>
-      <div class="switch-row">
-        <span class="switch-side" id="battery-disabled-label">Disabled</span>
         <label class="switch" for="battery-enabled">
           <input type="checkbox" id="battery-enabled" />
           <span class="switch-track"><span class="switch-thumb"></span></span>
         </label>
-        <span class="switch-side" id="battery-enabled-label">Enabled</span>
-      </div>
+      </h3>
       <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
         Only for Termux host with <b>termux-api</b> installed. Alerts are sent when battery percentage
         drops below configured levels.
