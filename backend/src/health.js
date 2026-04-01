@@ -8,6 +8,8 @@ export function createHealthModule({ dbApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const getBatteryAlertsConfig = dbApi.getBatteryAlertsConfig;
+  const INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
+  const SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
 
   // -----------------------
   // Health check helpers

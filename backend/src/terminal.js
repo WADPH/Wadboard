@@ -2,6 +2,8 @@ import fs from "fs";
 import { spawn } from "child_process";
 
 export function createTerminalModule({ authApi }) {
+  const SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
+
   function isAndroidLike() {
     const platform = String(process.platform || "");
     const release = String(process.release?.name || "");
