@@ -7,6 +7,7 @@
   <title>Wadboard</title>
   <link rel="icon" type="image/png" href="images/wadboard_logo.png">
   <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
+  <script src="https://code.iconify.design/iconify-icon/3.1.1/iconify-icon.min.js"></script>
 
   <style>
   :root {
@@ -785,6 +786,13 @@
     grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: .6rem;
   }
+  .icon-picker-search {
+    margin-bottom: .75rem;
+  }
+  .icon-picker-status {
+    margin-top: .15rem;
+    min-height: 1rem;
+  }
   .icon-option {
     cursor: pointer;
     min-height: 68px;
@@ -815,6 +823,12 @@
   .icon-option .btn-icon {
     width: 1.2rem;
     height: 1.2rem;
+  }
+  .icon-option iconify-icon,
+  .btn iconify-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    display: block;
   }
   .icon-option-none {
     font-size: .74rem;
@@ -1484,6 +1498,11 @@
       <button class="close" id="icon-picker-close" type="button">Close</button>
     </div>
     <div class="modal-body">
+      <div class="field icon-picker-search">
+        <label class="label">Search icons</label>
+        <input class="input" id="icon-picker-search" placeholder="Search: server, power, lock, terminal..." />
+        <div class="inline-status icon-picker-status" id="icon-picker-status"></div>
+      </div>
       <div class="icon-picker-grid" id="icon-picker-grid"></div>
     </div>
   </div>
@@ -1807,6 +1826,8 @@
   const hostNotesInput   = document.getElementById("host-notes");
   const iconPickerOverlay= document.getElementById("icon-picker-overlay");
   const iconPickerCloseBtn = document.getElementById("icon-picker-close");
+  const iconPickerSearchInput = document.getElementById("icon-picker-search");
+  const iconPickerStatusEl = document.getElementById("icon-picker-status");
   const iconPickerGrid   = document.getElementById("icon-picker-grid");
 
   const settingsOverlay       = document.getElementById("settings-overlay");
@@ -2017,21 +2038,33 @@
   ];
   const ACTION_ICON_MAP = Object.fromEntries(ACTION_ICON_OPTIONS.filter(opt => opt.key).map(opt => [opt.key, opt]));
   let activeIconPicker = null;
+  let iconSearchAbortController = null;
+  let iconSearchDebounceTimer = null;
 
   function getActionIconDefinition(iconKey) {
     return ACTION_ICON_MAP[String(iconKey || "").trim()] || null;
   }
 
+  function getActionIconMarkup(iconKey) {
+    const normalized = String(iconKey || "").trim();
+    const localDef = getActionIconDefinition(normalized);
+    if (localDef) return localDef.svg;
+    if (normalized.includes(":")) {
+      return `<iconify-icon class="btn-icon" icon="${normalized}" aria-hidden="true"></iconify-icon>`;
+    }
+    return "";
+  }
+
   function setButtonContentWithOptionalIcon(btn, iconKey, fallbackText) {
     const safeText = String(fallbackText || "").trim() || "Action";
-    const iconDef = getActionIconDefinition(iconKey);
+    const iconMarkup = getActionIconMarkup(iconKey);
     btn.innerHTML = "";
     btn.title = safeText;
     btn.setAttribute("aria-label", safeText);
 
-    if (iconDef) {
+    if (iconMarkup) {
       btn.classList.add("btn-icon-only", "btn-action-icon");
-      btn.insertAdjacentHTML("beforeend", iconDef.svg);
+      btn.insertAdjacentHTML("beforeend", iconMarkup);
       const sr = document.createElement("span");
       sr.className = "sr-only";
       sr.textContent = safeText;
@@ -2045,14 +2078,14 @@
 
   function setLinkContentWithOptionalIcon(linkEl, iconKey, fallbackText) {
     const safeText = String(fallbackText || "").trim() || "Open";
-    const iconDef = getActionIconDefinition(iconKey);
+    const iconMarkup = getActionIconMarkup(iconKey);
     linkEl.innerHTML = "";
     linkEl.title = safeText;
     linkEl.setAttribute("aria-label", safeText);
 
-    if (iconDef) {
+    if (iconMarkup) {
       linkEl.classList.add("btn-icon-only", "btn-action-icon");
-      linkEl.insertAdjacentHTML("beforeend", iconDef.svg);
+      linkEl.insertAdjacentHTML("beforeend", iconMarkup);
       const sr = document.createElement("span");
       sr.className = "sr-only";
       sr.textContent = safeText;
@@ -2082,13 +2115,25 @@
 
   function closeIconPicker() {
     activeIconPicker = null;
+    if (iconSearchAbortController) {
+      iconSearchAbortController.abort();
+      iconSearchAbortController = null;
+    }
+    if (iconSearchDebounceTimer) {
+      clearTimeout(iconSearchDebounceTimer);
+      iconSearchDebounceTimer = null;
+    }
     if (iconPickerOverlay) iconPickerOverlay.classList.add("hidden");
   }
 
-  function renderIconPickerGrid(selectedKey) {
+  function setIconPickerStatus(text) {
+    if (iconPickerStatusEl) iconPickerStatusEl.textContent = text || "";
+  }
+
+  function renderIconPickerGrid(items, selectedKey) {
     if (!iconPickerGrid) return;
     iconPickerGrid.innerHTML = "";
-    ACTION_ICON_OPTIONS.forEach(opt => {
+    items.forEach(opt => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "icon-option" + (opt.key === selectedKey ? " active" : "");
@@ -2096,7 +2141,7 @@
         btn.classList.add("icon-option-none");
         btn.textContent = "No icon";
       } else {
-        btn.innerHTML = `${opt.svg}<span>${opt.label}</span>`;
+        btn.innerHTML = `${getActionIconMarkup(opt.key)}<span>${opt.label}</span>`;
       }
       btn.addEventListener("click", () => {
         if (!activeIconPicker) return;
@@ -2107,10 +2152,60 @@
     });
   }
 
+  async function fetchIconSearchResults(query) {
+    if (iconSearchAbortController) iconSearchAbortController.abort();
+    iconSearchAbortController = new AbortController();
+
+    const params = new URLSearchParams({
+      query,
+      limit: "120"
+    });
+
+    const res = await fetch(`https://api.iconify.design/search?${params.toString()}`, {
+      signal: iconSearchAbortController.signal
+    });
+    if (!res.ok) throw new Error("search_failed");
+
+    const data = await res.json();
+    const icons = Array.isArray(data.icons) ? data.icons : [];
+    return icons.map(name => ({ key: name, label: name.split(":").pop().replaceAll("-", " ") }));
+  }
+
+  async function runIconSearch(query) {
+    const normalized = String(query || "").trim();
+    if (!activeIconPicker) return;
+
+    if (!normalized) {
+      setIconPickerStatus("Popular icons");
+      renderIconPickerGrid(ACTION_ICON_OPTIONS, getIconValue(activeIconPicker.input));
+      return;
+    }
+
+    setIconPickerStatus("Searching...");
+    try {
+      const found = await fetchIconSearchResults(normalized);
+      if (!activeIconPicker) return;
+      if (!found.length) {
+        setIconPickerStatus("No icons found.");
+        renderIconPickerGrid([{ key: "", label: "No icon" }], getIconValue(activeIconPicker.input));
+        return;
+      }
+      setIconPickerStatus(`Found ${found.length} icons`);
+      renderIconPickerGrid([{ key: "", label: "No icon" }, ...found], getIconValue(activeIconPicker.input));
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      setIconPickerStatus("Search unavailable. Showing local icons.");
+      renderIconPickerGrid(ACTION_ICON_OPTIONS, getIconValue(activeIconPicker.input));
+    }
+  }
+
   function openIconPicker(config) {
     activeIconPicker = config;
-    renderIconPickerGrid(getIconValue(config.input));
+    if (iconPickerSearchInput) iconPickerSearchInput.value = "";
+    setIconPickerStatus("Popular icons");
+    renderIconPickerGrid(ACTION_ICON_OPTIONS, getIconValue(config.input));
     if (iconPickerOverlay) iconPickerOverlay.classList.remove("hidden");
+    if (iconPickerSearchInput) iconPickerSearchInput.focus();
   }
 
   function showToast({ title, message, detail, type = "success", ttl = 5000 }) {
@@ -3417,6 +3512,14 @@ formWol.addEventListener("submit", async e => {
     });
   }
   if (iconPickerCloseBtn) iconPickerCloseBtn.addEventListener("click", closeIconPicker);
+  if (iconPickerSearchInput) {
+    iconPickerSearchInput.addEventListener("input", () => {
+      if (iconSearchDebounceTimer) clearTimeout(iconSearchDebounceTimer);
+      iconSearchDebounceTimer = setTimeout(() => {
+        runIconSearch(iconPickerSearchInput.value);
+      }, 220);
+    });
+  }
   if (iconPickerOverlay) {
     iconPickerOverlay.addEventListener("click", (e) => {
       if (e.target === iconPickerOverlay) closeIconPicker();
