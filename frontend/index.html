@@ -7,7 +7,6 @@
   <title>Wadboard</title>
   <link rel="icon" type="image/png" href="images/wadboard_logo.png">
   <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
-  <script src="https://code.iconify.design/iconify-icon/3.1.1/iconify-icon.min.js"></script>
 
   <style>
   :root {
@@ -820,15 +819,25 @@
     background: var(--drag-bg);
     color: var(--text-main);
   }
-  .icon-option .btn-icon {
+  .icon-option .btn-icon,
+  .icon-option .remote-icon {
     width: 1.2rem;
     height: 1.2rem;
   }
-  .icon-option iconify-icon,
-  .btn iconify-icon {
-    width: 1.2rem;
-    height: 1.2rem;
-    display: block;
+  .remote-icon {
+    display: inline-block;
+    flex: 0 0 auto;
+    background-color: currentColor;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+  }
+  .btn .remote-icon {
+    width: 1.1rem;
+    height: 1.1rem;
   }
   .icon-option-none {
     font-size: .74rem;
@@ -2045,12 +2054,19 @@
     return ACTION_ICON_MAP[String(iconKey || "").trim()] || null;
   }
 
+  function getRemoteIconUrl(iconKey) {
+    const normalized = String(iconKey || "").trim();
+    if (!normalized || !normalized.includes(":")) return "";
+    return `https://api.iconify.design/${encodeURIComponent(normalized)}.svg`;
+  }
+
   function getActionIconMarkup(iconKey) {
     const normalized = String(iconKey || "").trim();
     const localDef = getActionIconDefinition(normalized);
     if (localDef) return localDef.svg;
     if (normalized.includes(":")) {
-      return `<iconify-icon class="btn-icon" icon="${normalized}" aria-hidden="true"></iconify-icon>`;
+      const iconUrl = getRemoteIconUrl(normalized);
+      return `<span class="remote-icon" aria-hidden="true" style="-webkit-mask-image:url('${iconUrl}');mask-image:url('${iconUrl}');"></span>`;
     }
     return "";
   }
