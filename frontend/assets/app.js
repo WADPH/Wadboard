@@ -1219,12 +1219,13 @@ async function changeAdminPassword(oldPw, newPw) {
   }
 
   async function exportConfig() {
-    if (!editMode) return;
     if (configImportStatus) configImportStatus.textContent = "Preparing export...";
     const res = await fetch(API_BASE + "/config/export", {
       credentials: "include"
     });
     if (res.status === 401) {
+      if (configImportStatus) configImportStatus.textContent = "Admin session required.";
+      showToast({ title: "Config Export", message: "Admin session required", type: "error" });
       await handleUnauthorizedResponse();
       return;
     }
@@ -1251,7 +1252,7 @@ async function changeAdminPassword(oldPw, newPw) {
   }
 
   async function importConfigFile(file) {
-    if (!editMode || !file) return;
+    if (!file) return;
     if (configImportStatus) configImportStatus.textContent = "Validating JSON...";
 
     let parsed;
@@ -1266,6 +1267,11 @@ async function changeAdminPassword(oldPw, newPw) {
     if (configImportStatus) configImportStatus.textContent = "Importing...";
     const res = await apiRaw("POST", "/config/import", JSON.stringify(parsed));
     const payload = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      if (configImportStatus) configImportStatus.textContent = "Admin session required.";
+      showToast({ title: "Config Import", message: "Admin session required", type: "error" });
+      return;
+    }
     if (!res.ok || !payload || !payload.ok) {
       const message = payload && payload.message ? payload.message : "Import failed.";
       if (configImportStatus) configImportStatus.textContent = message;
@@ -1455,7 +1461,6 @@ if (configExportBtn) {
 
 if (configImportBtn && configImportInput) {
   configImportBtn.addEventListener("click", () => {
-    if (!editMode) return;
     configImportInput.value = "";
     configImportInput.click();
   });
@@ -1468,7 +1473,6 @@ if (configImportBtn && configImportInput) {
 
 if (viewLogsBtn) {
   viewLogsBtn.addEventListener("click", () => {
-    if (!editMode) return;
     openLogsModal();
   });
 }
