@@ -6,6 +6,40 @@ Wadboard is a self-hosted infrastructure dashboard for internal environments. It
 <img width="1245" height="1001" alt="image" src="https://github.com/user-attachments/assets/26392fee-beba-432e-bf2f-21f0db1db4c0" />
 </details>
 
+## Table of Contents
+
+- [Wadboard](#wadboard)
+  - [What it does](#what-it-does)
+  - [Architecture](#architecture)
+  - [Core features](#core-features)
+    - [Service Monitoring](#service-monitoring)
+    - [Quick Links](#quick-links)
+    - [Wake-on-LAN and Power Actions](#wake-on-lan-and-power-actions)
+    - [SSH Actions](#ssh-actions)
+    - [Host Maintenance Commands](#host-maintenance-commands)
+    - [Health and Host Metrics](#health-and-host-metrics)
+    - [Battery Monitoring](#battery-monitoring)
+    - [Admin Session and Private Mode](#admin-session-and-private-mode)
+    - [Config Import / Export](#config-import--export)
+    - [Logs and Audit Trail](#logs-and-audit-trail)
+    - [Browser Terminal](#browser-terminal)
+  - [Security model](#security-model)
+    - [View mode](#view-mode)
+    - [Private mode](#private-mode)
+    - [Admin mode](#admin-mode)
+  - [Requirements](#requirements)
+    - [Required](#required)
+    - [Optional but feature-dependent](#optional-but-feature-dependent)
+  - [Installation](#installation)
+    - [1. Clone the repository](#1-clone-the-repository)
+    - [2. Install backend dependencies](#2-install-backend-dependencies)
+    - [3. Start the backend](#3-start-the-backend)
+    - [4. Open in browser](#4-open-in-browser)
+  - [Logging](#logging)
+  - [Project structure](#project-structure)
+  - [Notes](#notes)
+
+
 ## What it does
 
 - Monitor services with HTTP(S) or ping checks
