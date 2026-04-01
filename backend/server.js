@@ -23,12 +23,12 @@
 //
 //       lastRun, lastResult,
 //       sshActions: [
-//         { id, label, host, user, pass, command, lastRun, lastResult }
+//         { id, label, icon, host, user, pass, command, lastRun, lastResult }
 //       ]
 //     }
 //   ],
 //   hostActions: [
-//     { id, label, command, notes, lastRun, lastResult }
+//     { id, label, icon, command, notes, lastRun, lastResult }
 //   ],
 //   config: {
 //     batteryAlerts: {
@@ -389,6 +389,7 @@ db.wol.forEach(task => {
   }
   task.sshActions.forEach(a => {
     if (!a.id) a.id = makeId("ssh");
+    if (a.icon === undefined) a.icon = "";
     if (a.pass === undefined) a.pass = "";
     if (a.lastRun === undefined) a.lastRun = null;
     if (a.lastResult === undefined) a.lastResult = "never";
@@ -399,6 +400,7 @@ db.wol.forEach(task => {
     db.hostActions = Array.isArray(db.hostActions) ? db.hostActions : [];
     db.hostActions.forEach(a => {
       if (!a.id) a.id = makeId("host");
+      if (a.icon === undefined) a.icon = "";
       if (a.notes === undefined) a.notes = "";
       if (a.lastRun === undefined) a.lastRun = null;
       if (a.lastResult === undefined) a.lastResult = "never";
@@ -828,6 +830,7 @@ function sanitizeForClient(isAdmin) {
     ? w.sshActions.map(a => ({
         id: a.id,
         label: a.label,
+        icon: a.icon || "",
         lastRun: a.lastRun || null,
         lastResult: a.lastResult || "never"
       }))
@@ -837,6 +840,7 @@ function sanitizeForClient(isAdmin) {
       ? db.hostActions.map(a => ({
           id: a.id,
           label: a.label,
+          icon: a.icon || "",
           notes: a.notes || "",
           lastRun: a.lastRun || null,
           lastResult: a.lastResult || "never"
@@ -1837,6 +1841,7 @@ app.post("/api/wol", requireAdmin, (req, res) => {
       .map(a => ({
         id: makeId("ssh"),
         label: (a.label || "").trim(),
+        icon: (a.icon || "").trim(),
         host: (a.host || "").trim(),
         user: (a.user || "").trim(),
         pass: (a.pass || "").trim(),
@@ -1971,6 +1976,7 @@ if (task.type === "wadesp") {
         .map(a => ({
           id: makeId("ssh"),
           label: (a.label || "").trim(),
+          icon: (a.icon || "").trim(),
           host: (a.host || task.host).trim(),
           user: (a.user || "").trim(),
           pass: (a.pass || "").trim(),
@@ -2042,7 +2048,7 @@ app.post("/api/wol/:id/ssh/:actionId/run", requireAdmin, async (req, res) => {
 // Host actions CRUD / RUN
 // -----------------------
 app.post("/api/host-action", requireAdmin, (req, res) => {
-  const { label, command, notes } = req.body || {};
+  const { label, icon, command, notes } = req.body || {};
   if (!label || !command) {
     return res.status(400).json({ error: "Missing required fields" });
   }
@@ -2050,6 +2056,7 @@ app.post("/api/host-action", requireAdmin, (req, res) => {
   const newAction = {
     id: makeId("host"),
     label: label.trim(),
+    icon: (icon || "").trim(),
     command: command.trim(),
     notes: (notes || "").trim(),
     lastRun: null,
@@ -2066,8 +2073,9 @@ app.put("/api/host-action/:id", requireAdmin, (req, res) => {
   const action = db.hostActions.find(a => a.id === id);
   if (!action) return res.status(404).json({ error: "Host action not found" });
 
-  const { label, command, notes } = req.body || {};
+  const { label, icon, command, notes } = req.body || {};
   if (label   !== undefined) action.label   = String(label).trim();
+  if (icon    !== undefined) action.icon    = String(icon).trim();
   if (command !== undefined) action.command = String(command).trim();
   if (notes   !== undefined) action.notes   = String(notes).trim();
 
