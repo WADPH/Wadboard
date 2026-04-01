@@ -1,6 +1,10 @@
 # Wadboard
 
 Wadboard is a self-hosted infrastructure dashboard for internal environments. It combines service monitoring, quick links, Wake-on-LAN and remote device actions, host health metrics, a browser terminal, and lightweight admin controls in a single project with a static frontend and a Node.js backend.
+<details>
+   <summary>Click to expand</summary>
+<img width="1245" height="1001" alt="image" src="https://github.com/user-attachments/assets/26392fee-beba-432e-bf2f-21f0db1db4c0" />
+</details>
 
 ## What it does
 
