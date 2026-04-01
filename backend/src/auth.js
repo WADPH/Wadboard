@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { audit, getRequestSource } from "./logger.js";
 
 export function createAuthModule({ dbApi }) {
   const db = dbApi.getDB();
@@ -227,6 +228,7 @@ export function createAuthModule({ dbApi }) {
       clearAccessFailures(req);
       const token = createViewSession(req);
       setViewAccessCookie(res, token);
+      audit("access.login", "Private-mode access granted", getRequestSource(req, { viewToken: token }));
       return res.json({ ok: true });
     });
 
@@ -236,6 +238,7 @@ export function createAuthModule({ dbApi }) {
         delete VIEW_SESSIONS[token];
       }
       clearViewAccessCookie(res);
+      audit("access.logout", "Private-mode session logged out", getRequestSource(req));
       return res.json({ ok: true });
     });
 
@@ -254,6 +257,7 @@ export function createAuthModule({ dbApi }) {
         clearViewAccessCookie(res);
       }
 
+      audit("access.mode", `Private mode ${privateMode ? "enabled" : "disabled"}`, getRequestSource(req), { privateMode });
       res.json({ ok: true, privateMode, authorized: true });
     });
 
@@ -345,6 +349,7 @@ export function createAuthModule({ dbApi }) {
         setViewAccessCookie(res, viewToken);
       }
 
+      audit("admin.login", db.admin.initialized ? "Admin session created" : "Admin password initialized", getRequestSource(req, { adminToken: token }));
       return res.json({ ok: true });
     });
 
@@ -363,6 +368,7 @@ export function createAuthModule({ dbApi }) {
 
       db.admin.passwordHash = hashPassword(newPassword);
       saveDB();
+      audit("admin.password.change", "Admin password updated", getRequestSource(req));
 
       res.json({ ok: true });
     });
@@ -388,6 +394,7 @@ export function createAuthModule({ dbApi }) {
         secure: false
       });
 
+      audit("admin.logout", "Admin session logged out", getRequestSource(req));
       return res.json({ ok: true });
     });
 

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { error as logError } from "./logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,9 +47,6 @@ let db = {
   }
 };
 
-
-
-
 function hashPassword(password) {
   return crypto
     .createHash("sha256")
@@ -84,15 +82,15 @@ function ensureConfigStructure() {
   if (typeof db.config.brandText !== "string") {
     db.config.brandText = "";
   }
-  if (typeof db.config.privateMode !== "boolean") {
+if (typeof db.config.privateMode !== "boolean") {
     db.config.privateMode = false;
   }
 
-if (!db.admin || typeof db.admin !== "object") {
-  db.admin = { passwordHash: null, initialized: false };
-}
-if (db.admin.initialized === undefined) db.admin.initialized = false;
-if (db.admin.passwordHash === undefined) db.admin.passwordHash = null;
+  if (!db.admin || typeof db.admin !== "object") {
+    db.admin = { passwordHash: null, initialized: false };
+  }
+  if (db.admin.initialized === undefined) db.admin.initialized = false;
+  if (db.admin.passwordHash === undefined) db.admin.passwordHash = null;
 
 }
 
@@ -107,79 +105,101 @@ function getBrandTextConfig() {
   return { custom, text: custom || "WELCOME" };
 }
 
-function loadDB() {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    db = JSON.parse(raw);
+function buildEmptyDb() {
+  return {
+    services: [],
+    links: [],
+    wol: [],
+    hostActions: [],
+    config: {
+      batteryAlerts: defaultBatteryAlertsConfig(),
+      brandText: "",
+      privateMode: false
+    },
+    admin: {
+      passwordHash: null,
+      initialized: false
+    }
+  };
+}
 
-    db.services = Array.isArray(db.services) ? db.services : [];
-    db.services.forEach(svc => {
-      if (svc.notes === undefined)       svc.notes = "";
-      if (svc.lastStatus === undefined)  svc.lastStatus = "unknown";
-      if (svc.lastChecked === undefined) svc.lastChecked = null;
-      if (svc.method === undefined)      svc.method = "http";
-    });
+function ensureNormalizedDb(input) {
+  const nextDb = (input && typeof input === "object" && !Array.isArray(input))
+    ? input
+    : buildEmptyDb();
 
-    db.links = Array.isArray(db.links) ? db.links : [];
-    db.links.forEach(lnk => {
-      if (lnk.notes === undefined) lnk.notes = "";
-      if (lnk.icon === undefined)  lnk.icon = "🔗";
-    });
-
-
-db.wol.forEach(task => {
-  if (!task.type) task.type = "mikrotik";
-
-  if (task.notes === undefined)      task.notes = "";
-  if (task.lastRun === undefined)    task.lastRun = null;
-  if (task.lastResult === undefined) task.lastResult = "never";
-  if (task.statusMethod === undefined) task.statusMethod = "http";
-  if (task.statusTarget === undefined) task.statusTarget = "";
-  if (task.lastStatus === undefined)   task.lastStatus = "unknown";
-  if (task.lastChecked === undefined)  task.lastChecked = null;
-
-  if (task.type === "wadesp") {
-    if (task.espHost === undefined) task.espHost = "";
-    if (task.espToken === undefined) task.espToken = "";
-  }
-
-
-  if (!Array.isArray(task.sshActions)) {
-    task.sshActions = [];
-  }
-  task.sshActions.forEach(a => {
-    if (!a.id) a.id = makeId("ssh");
-    if (a.icon === undefined) a.icon = "";
-    if (a.pass === undefined) a.pass = "";
-    if (a.lastRun === undefined) a.lastRun = null;
-    if (a.lastResult === undefined) a.lastResult = "never";
+  nextDb.services = Array.isArray(nextDb.services) ? nextDb.services : [];
+  nextDb.services.forEach(svc => {
+    if (!svc.id) svc.id = makeId("svc");
+    if (svc.notes === undefined) svc.notes = "";
+    if (svc.lastStatus === undefined) svc.lastStatus = "unknown";
+    if (svc.lastChecked === undefined) svc.lastChecked = null;
+    if (svc.method === undefined) svc.method = "http";
   });
-});
 
+  nextDb.links = Array.isArray(nextDb.links) ? nextDb.links : [];
+  nextDb.links.forEach(lnk => {
+    if (!lnk.id) lnk.id = makeId("link");
+    if (lnk.notes === undefined) lnk.notes = "";
+    if (lnk.icon === undefined) lnk.icon = "🔗";
+  });
 
-    db.hostActions = Array.isArray(db.hostActions) ? db.hostActions : [];
-    db.hostActions.forEach(a => {
-      if (!a.id) a.id = makeId("host");
+  nextDb.wol = Array.isArray(nextDb.wol) ? nextDb.wol : [];
+  nextDb.wol.forEach(task => {
+    if (!task.id) task.id = makeId("wol");
+    if (!task.type) task.type = "mikrotik";
+    if (task.notes === undefined) task.notes = "";
+    if (task.lastRun === undefined) task.lastRun = null;
+    if (task.lastResult === undefined) task.lastResult = "never";
+    if (task.statusMethod === undefined) task.statusMethod = "http";
+    if (task.statusTarget === undefined) task.statusTarget = "";
+    if (task.lastStatus === undefined) task.lastStatus = "unknown";
+    if (task.lastChecked === undefined) task.lastChecked = null;
+
+    if (task.type === "wadesp") {
+      if (task.espHost === undefined) task.espHost = "";
+      if (task.espToken === undefined) task.espToken = "";
+    }
+
+    if (!Array.isArray(task.sshActions)) {
+      task.sshActions = [];
+    }
+    task.sshActions.forEach(a => {
+      if (!a.id) a.id = makeId("ssh");
       if (a.icon === undefined) a.icon = "";
-      if (a.notes === undefined) a.notes = "";
+      if (a.pass === undefined) a.pass = "";
       if (a.lastRun === undefined) a.lastRun = null;
       if (a.lastResult === undefined) a.lastResult = "never";
     });
+  });
 
-    ensureConfigStructure();
+  nextDb.hostActions = Array.isArray(nextDb.hostActions) ? nextDb.hostActions : [];
+  nextDb.hostActions.forEach(a => {
+    if (!a.id) a.id = makeId("host");
+    if (a.icon === undefined) a.icon = "";
+    if (a.notes === undefined) a.notes = "";
+    if (a.lastRun === undefined) a.lastRun = null;
+    if (a.lastResult === undefined) a.lastResult = "never";
+  });
+
+  db = nextDb;
+  ensureConfigStructure();
+  return db;
+}
+
+function replaceDB(nextDb) {
+  db = ensureNormalizedDb(nextDb);
+  return db;
+}
+
+function loadDB() {
+  try {
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    replaceDB(parsed);
   } catch (err) {
-    console.error("Failed to load DB file. Using empty DB.");
-    db = {
-      services: [],
-      links: [],
-      wol: [],
-      hostActions: [],
-      config: {
-        batteryAlerts: defaultBatteryAlertsConfig(),
-        brandText: "",
-        privateMode: false
-      }
-    };
+    logError("Failed to load DB file. Using empty DB.", err);
+    db = buildEmptyDb();
   }
 }
 
@@ -246,7 +266,10 @@ export {
   ensureConfigStructure,
   getBatteryAlertsConfig,
   getBrandTextConfig,
+  ensureNormalizedDb,
   loadDB,
+  buildEmptyDb,
+  replaceDB,
   saveDB,
   sanitizeForClient,
   getDB

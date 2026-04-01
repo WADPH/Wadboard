@@ -665,9 +665,46 @@
       <div id="view-sessions-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
       <div id="view-sessions-list" class="sessions-box"></div>
     </details>
+
+    <div class="form" style="margin-top:1rem;">
+      <h3 style="margin-top:0;">Config</h3>
+      <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+        Export current `wadph-data.json` data or import a compatible JSON config. Current config is backed up automatically before import.
+      </p>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button class="btn" type="button" id="config-export-btn">Export Config</button>
+        <button class="btn" type="button" id="config-import-btn">Import Config</button>
+      </div>
+      <input id="config-import-input" type="file" accept="application/json,.json" class="hidden" />
+      <div id="config-import-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
+    </div>
+
+    <div class="form" style="margin-top:1rem;">
+      <h3 style="margin-top:0;">Audit logs</h3>
+      <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+        View recent backend, error and audit log entries with timestamps.
+      </p>
+      <button class="btn" type="button" id="view-logs-btn">View Logs</button>
+    </div>
   </div>
 </div>
 </div>
+</div>
+
+<div class="overlay hidden" id="logs-overlay">
+  <div class="modal logs-modal">
+    <div class="modal-top">
+      <div style="font-weight:800; font-size:.9rem; color:var(--text-main);">Recent logs</div>
+      <div style="display:flex; gap:.5rem;">
+        <button class="btn" type="button" id="logs-refresh-btn">Refresh</button>
+        <button class="close" id="logs-close" type="button">Close</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="logs-status" class="inline-status"></div>
+      <pre id="logs-viewer" class="logs-viewer">No logs loaded.</pre>
+    </div>
+  </div>
 </div>
 
 <!-- Terminal overlay -->

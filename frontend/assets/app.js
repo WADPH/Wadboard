@@ -159,6 +159,16 @@
   const batteryChatIdInput    = document.getElementById("battery-chat-id");
   const batterySaveBtn        = document.getElementById("battery-save-btn");
   const batterySaveStatus     = document.getElementById("battery-save-status");
+  const configExportBtn       = document.getElementById("config-export-btn");
+  const configImportBtn       = document.getElementById("config-import-btn");
+  const configImportInput     = document.getElementById("config-import-input");
+  const configImportStatus    = document.getElementById("config-import-status");
+  const viewLogsBtn           = document.getElementById("view-logs-btn");
+  const logsOverlay           = document.getElementById("logs-overlay");
+  const logsCloseBtn          = document.getElementById("logs-close");
+  const logsRefreshBtn        = document.getElementById("logs-refresh-btn");
+  const logsStatusEl          = document.getElementById("logs-status");
+  const logsViewerEl          = document.getElementById("logs-viewer");
 
   // ==============================
   // THEME
@@ -669,6 +679,21 @@
     return res.json().catch(() => ({}));
   }
 
+  async function apiRaw(method, path, body, contentType = "application/json") {
+    const headers = {};
+    if (contentType) headers["Content-Type"] = contentType;
+    const res = await fetch(API_BASE + path, {
+      method,
+      credentials: "include",
+      headers,
+      body
+    });
+    if (res.status === 401) {
+      await handleUnauthorizedResponse();
+    }
+    return res;
+  }
+
   // helper: ask for password only when needed for protected actions
   async function ensureAdminThen(actionFn, { force = false } = {}) {
     if (editMode && !force) {
@@ -1169,6 +1194,7 @@ async function changeAdminPassword(oldPw, newPw) {
       settingsLoginForm.classList.add("hidden");
       settingsLogoutRow.classList.remove("hidden");
       adminOnlyBox.classList.remove("hidden");
+      if (configImportStatus) configImportStatus.textContent = "";
       loadBrandTextIntoForm();
       loadAccessModeIntoForm();
       loadBatteryConfigIntoForm();
@@ -1190,6 +1216,112 @@ async function changeAdminPassword(oldPw, newPw) {
   function closeSettingsModal() {
     if (!settingsOverlay) return;
     settingsOverlay.classList.add("hidden");
+  }
+
+  async function exportConfig() {
+    if (!editMode) return;
+    if (configImportStatus) configImportStatus.textContent = "Preparing export...";
+    const res = await fetch(API_BASE + "/config/export", {
+      credentials: "include"
+    });
+    if (res.status === 401) {
+      await handleUnauthorizedResponse();
+      return;
+    }
+    if (!res.ok) {
+      if (configImportStatus) configImportStatus.textContent = "Export failed.";
+      showToast({ title: "Config Export", message: "Export failed", type: "error" });
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const disposition = res.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename=\"?([^"]+)\"?/i);
+    a.href = url;
+    a.download = match ? match[1] : "wadboard-config.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    if (configImportStatus) configImportStatus.textContent = "Config exported.";
+    showToast({ title: "Config Export", message: "Downloaded successfully", type: "success" });
+  }
+
+  async function importConfigFile(file) {
+    if (!editMode || !file) return;
+    if (configImportStatus) configImportStatus.textContent = "Validating JSON...";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      if (configImportStatus) configImportStatus.textContent = "Invalid JSON file.";
+      showToast({ title: "Config Import", message: "Invalid JSON file", type: "error" });
+      return;
+    }
+
+    if (configImportStatus) configImportStatus.textContent = "Importing...";
+    const res = await apiRaw("POST", "/config/import", JSON.stringify(parsed));
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload || !payload.ok) {
+      const message = payload && payload.message ? payload.message : "Import failed.";
+      if (configImportStatus) configImportStatus.textContent = message;
+      showToast({ title: "Config Import", message, type: "error" });
+      return;
+    }
+
+    state = {
+      services: payload.state?.services || [],
+      links: payload.state?.links || [],
+      wol: payload.state?.wol || [],
+      hostActions: payload.state?.hostActions || []
+    };
+    render();
+    await refreshBrandTextFromServer();
+    await loadAccessModeIntoForm();
+    await loadBatteryConfigIntoForm();
+    await loadViewSessionsIntoForm();
+
+    const detail = payload.backupFile ? `Backup: ${payload.backupFile}` : "";
+    if (configImportStatus) {
+      configImportStatus.textContent = detail
+        ? `Imported successfully. ${detail}`
+        : "Imported successfully.";
+    }
+    showToast({
+      title: "Config Import",
+      message: "Imported successfully",
+      detail,
+      type: "success"
+    });
+  }
+
+  function openLogsModal() {
+    if (!logsOverlay) return;
+    logsOverlay.classList.remove("hidden");
+    loadLogsIntoViewer();
+  }
+
+  function closeLogsModal() {
+    if (!logsOverlay) return;
+    logsOverlay.classList.add("hidden");
+  }
+
+  async function loadLogsIntoViewer() {
+    if (!logsViewerEl) return;
+    if (logsStatusEl) logsStatusEl.textContent = "Loading...";
+    const data = await apiGET("/logs?limit=250");
+    if (!data || !data.ok) {
+      logsViewerEl.textContent = "Unable to load logs.";
+      if (logsStatusEl) logsStatusEl.textContent = "Load failed.";
+      return;
+    }
+    logsViewerEl.textContent = (data.lines || []).join("\n") || "No log entries yet.";
+    logsViewerEl.scrollTop = logsViewerEl.scrollHeight;
+    if (logsStatusEl) logsStatusEl.textContent = `Showing last ${(data.lines || []).length} lines.`;
   }
 
   settingsCloseBtn.addEventListener("click", closeSettingsModal);
@@ -1312,6 +1444,42 @@ if (viewSessionsRevokeOthersBtn) {
     } else {
       setViewSessionsStatus("Failed to revoke other sessions.");
     }
+  });
+}
+
+if (configExportBtn) {
+  configExportBtn.addEventListener("click", async () => {
+    await exportConfig();
+  });
+}
+
+if (configImportBtn && configImportInput) {
+  configImportBtn.addEventListener("click", () => {
+    if (!editMode) return;
+    configImportInput.value = "";
+    configImportInput.click();
+  });
+
+  configImportInput.addEventListener("change", async () => {
+    const file = configImportInput.files && configImportInput.files[0];
+    await importConfigFile(file);
+  });
+}
+
+if (viewLogsBtn) {
+  viewLogsBtn.addEventListener("click", () => {
+    if (!editMode) return;
+    openLogsModal();
+  });
+}
+
+if (logsCloseBtn) {
+  logsCloseBtn.addEventListener("click", closeLogsModal);
+}
+
+if (logsRefreshBtn) {
+  logsRefreshBtn.addEventListener("click", async () => {
+    await loadLogsIntoViewer();
   });
 }
 

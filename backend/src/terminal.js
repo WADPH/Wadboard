@@ -1,5 +1,6 @@
 import fs from "fs";
 import { spawn } from "child_process";
+import { error as logError, info as logInfo } from "./logger.js";
 
 export function createTerminalModule({ authApi }) {
   const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
@@ -152,7 +153,7 @@ export function createTerminalModule({ authApi }) {
     };
 
     shellProcess.on("error", err => {
-      console.error("terminal shell error:", err && err.message ? err.message : err);
+      logError("terminal shell error", err);
       stopTerminalSession(session, "error");
     });
 
@@ -261,6 +262,7 @@ export function createTerminalModule({ authApi }) {
       }
 
       terminalSession.clients.add(ws);
+      logInfo("Terminal session attached", { token: String(token || "").slice(0, 8) });
       ws.send(JSON.stringify({ type: "ready" }));
       if (terminalSession.buffer) {
         try {

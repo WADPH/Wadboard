@@ -475,6 +475,27 @@
     height: min(80vh, 680px);
   }
 
+  .logs-modal {
+    width: min(96vw, 980px);
+    height: min(82vh, 760px);
+  }
+
+  .logs-viewer {
+    margin: 0;
+    padding: .9rem 1rem;
+    min-height: 320px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    color: var(--text-main);
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .76rem;
+    line-height: 1.5;
+  }
+
   .terminal-body {
     padding-right: 0;
   }

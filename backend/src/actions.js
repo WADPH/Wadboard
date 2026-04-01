@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { exec } from "child_process";
+import { audit, error as logError } from "./logger.js";
 
 export function createActionsModule({ dbApi }) {
   const db = dbApi.getDB();
@@ -9,13 +10,14 @@ export function createActionsModule({ dbApi }) {
   // WOL execution (MikroTik, Basic, PowerSW)
   // -----------------------
 
-  function executeBasicWOL(task) {
+  function executeBasicWOL(task, context = {}) {
     return new Promise(resolve => {
       const mac = (task.mac || "").trim();
       if (!mac) {
         task.lastRun = new Date().toISOString();
         task.lastResult = "invalid_mac";
         saveDB();
+        audit("wol.run", `WOL failed: ${task.name || task.id}`, context.source, { result: "invalid_mac" });
         return resolve({ ok: false, result: "invalid_mac", detail: "Missing MAC address" });
       }
 
@@ -43,18 +45,20 @@ export function createActionsModule({ dbApi }) {
         task.lastRun = new Date().toISOString();
         task.lastResult = result;
         saveDB();
+        audit("wol.run", `WOL ${okFlag ? "executed" : "failed"}: ${task.name || task.id}`, context.source, { result, detail });
         resolve({ ok: okFlag, result, detail });
       });
     });
   }
 
 
-  async function executeWadEspPower(task) {
+  async function executeWadEspPower(task, context = {}) {
     const host = (task.espHost || "").trim();
     if (!host) {
       task.lastRun = new Date().toISOString();
       task.lastResult = "invalid_esp_host";
       saveDB();
+      audit("wol.run", `WadESP WOL failed: ${task.name || task.id}`, context.source, { result: "invalid_esp_host" });
       return { ok: false, result: "invalid_esp_host", detail: "Missing ESP host" };
     }
 
@@ -73,17 +77,21 @@ export function createActionsModule({ dbApi }) {
         task.lastRun = new Date().toISOString();
         task.lastResult = "http_" + res.status;
         saveDB();
+        audit("wol.run", `WadESP WOL failed: ${task.name || task.id}`, context.source, { result: "http_" + res.status });
         return { ok: false, result: "http_" + res.status, detail: res.statusText || "ESP HTTP error" };
       }
 
       task.lastRun = new Date().toISOString();
       task.lastResult = "ok";
       saveDB();
+      audit("wol.run", `WadESP WOL executed: ${task.name || task.id}`, context.source, { result: "ok" });
       return { ok: true, result: "ok" };
     } catch (e) {
       task.lastRun = new Date().toISOString();
       task.lastResult = "error";
       saveDB();
+      logError("WadESP execution error", e);
+      audit("wol.run", `WadESP WOL failed: ${task.name || task.id}`, context.source, { result: "error", detail: e && e.message ? e.message : e });
       return { ok: false, result: "error", detail: e && e.message ? e.message : "ESP request failed" };
     } finally {
       clearTimeout(timer);
@@ -91,13 +99,13 @@ export function createActionsModule({ dbApi }) {
   }
 
 
-  async function executeWOLTask(task) {
+  async function executeWOLTask(task, context = {}) {
     if (task.type === "basic") {
-      return executeBasicWOL(task);
+      return executeBasicWOL(task, context);
     }
 
     if (task.type === "wadesp") {
-      return executeWadEspPower(task);
+      return executeWadEspPower(task, context);
     }
 
     // default: mikrotik
@@ -139,6 +147,7 @@ export function createActionsModule({ dbApi }) {
     task.lastRun = new Date().toISOString();
     task.lastResult = result;
     saveDB();
+    audit("wol.run", `WOL ${okFlag ? "executed" : "failed"}: ${task.name || task.id}`, context.source, { result, detail });
 
     return { ok: okFlag, result, detail };
   }
@@ -153,7 +162,7 @@ export function createActionsModule({ dbApi }) {
     return String(str).replace(/'/g, `'\\''`);
   }
 
-  async function executeSSHAction(task, action) {
+  async function executeSSHAction(task, action, context = {}) {
     const host = (action.host || task.host || "").trim();
     const user = (action.user || "").trim();
     const pass = (action.pass || "").trim();
@@ -164,6 +173,7 @@ export function createActionsModule({ dbApi }) {
       action.lastRun = new Date().toISOString();
       action.lastResult = result;
       saveDB();
+      audit("ssh.run", `SSH action failed: ${action.label || action.id}`, context.source, { result });
       return { ok: false, result, detail: "Missing SSH host/user/command" };
     }
 
@@ -178,6 +188,7 @@ export function createActionsModule({ dbApi }) {
         action.lastRun = new Date().toISOString();
         action.lastResult = result;
         saveDB();
+        audit("ssh.run", `SSH action failed: ${action.label || action.id}`, context.source, { result });
         return { ok: false, result, detail: hint };
       }
     }
@@ -207,6 +218,7 @@ export function createActionsModule({ dbApi }) {
         action.lastRun = new Date().toISOString();
         action.lastResult = result;
         saveDB();
+        audit("ssh.run", `SSH action ${okFlag ? "executed" : "failed"}: ${action.label || action.id}`, context.source, { result, detail });
         resolve({ ok: okFlag, result, detail });
       });
     });
@@ -218,7 +230,7 @@ export function createActionsModule({ dbApi }) {
   const INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
   const SHELL_BIN   = "/data/data/com.termux/files/usr/bin/bash";
 
-  function executeHostAction(action) {
+  function executeHostAction(action, context = {}) {
     return new Promise(resolve => {
       const cmd = (action.command || "").trim();
       if (!cmd) {
@@ -226,6 +238,7 @@ export function createActionsModule({ dbApi }) {
         action.lastRun = new Date().toISOString();
         action.lastResult = result;
         saveDB();
+        audit("host-action.run", `Host action failed: ${action.label || action.id}`, context.source, { result });
         return resolve({ ok: false, result, detail: "Missing command" });
       }
 
@@ -244,6 +257,7 @@ export function createActionsModule({ dbApi }) {
         action.lastRun = new Date().toISOString();
         action.lastResult = result;
         saveDB();
+        audit("host-action.run", `Host action ${okFlag ? "executed" : "failed"}: ${action.label || action.id}`, context.source, { result, detail });
         resolve({ ok: okFlag, result, detail });
       });
     });

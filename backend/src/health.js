@@ -3,6 +3,7 @@ import os from "os";
 import https from "https";
 import fetch from "node-fetch";
 import { exec } from "child_process";
+import { error as logError, warn as logWarn } from "./logger.js";
 
 export function createHealthModule({ dbApi }) {
   const db = dbApi.getDB();
@@ -106,7 +107,7 @@ export function createHealthModule({ dbApi }) {
       }
       saveDB();
     } catch (err) {
-      console.error("healthCheckAll error:", err);
+      logError("healthCheckAll error", err);
     }
   }
 
@@ -209,7 +210,7 @@ export function createHealthModule({ dbApi }) {
   async function sendBatteryAlert(level, percentage) {
     const cfg = getBatteryAlertsConfig();
     if (!cfg.telegramBotToken || !cfg.telegramChatId) {
-      console.warn("Battery alert enabled but Telegram token/chat not configured");
+      logWarn("Battery alert enabled but Telegram token/chat not configured");
       return false;
     }
 
@@ -232,12 +233,12 @@ export function createHealthModule({ dbApi }) {
       clearTimeout(timer);
 
       if (!res.ok) {
-        console.error("Battery alert send failed:", res.status, res.statusText);
+        logError("Battery alert send failed", { status: res.status, statusText: res.statusText });
         return false;
       }
       return true;
     } catch (err) {
-      console.error("Battery alert send error:", err && err.message ? err.message : err);
+      logError("Battery alert send error", err);
       return false;
     }
   }
@@ -282,7 +283,7 @@ export function createHealthModule({ dbApi }) {
           saveDB();
         })
         .catch(err => {
-          console.error("Battery alert error:", err);
+          logError("Battery alert error", err);
         });
     }
   }
@@ -326,7 +327,7 @@ export function createHealthModule({ dbApi }) {
         try {
           checkBatteryAlerts();
         } catch (e) {
-          console.error("checkBatteryAlerts error:", e);
+          logError("checkBatteryAlerts error", e);
         }
 
         resolve(true);
@@ -708,7 +709,7 @@ export function createHealthModule({ dbApi }) {
           battery
         });
       } catch (e) {
-        console.error("/api/health error:", e && e.message ? e.message : e);
+        logError("/api/health error", e);
         res.status(500).json({ ok: false, error: "health_failed" });
       }
     });
@@ -764,11 +765,11 @@ export function createHealthModule({ dbApi }) {
   function startMonitoring() {
     pollHostInfoOnce().catch(() => {});
     healthCheckAll().catch(err => {
-      console.error("initial healthCheckAll error:", err);
+      logError("initial healthCheckAll error", err);
     });
     setInterval(() => {
       healthCheckAll().catch(err => {
-        console.error("interval healthCheckAll error:", err);
+        logError("interval healthCheckAll error", err);
       });
     }, 10000);
   }

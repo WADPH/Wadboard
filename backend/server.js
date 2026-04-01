@@ -10,6 +10,7 @@ import { createHealthModule } from "./src/health.js";
 import { createActionsModule } from "./src/actions.js";
 import { createTerminalModule } from "./src/terminal.js";
 import { registerAppRoutes } from "./src/routes.js";
+import * as logger from "./src/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,8 +43,16 @@ registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi });
 
 healthApi.startMonitoring();
 
+process.on("uncaughtException", err => {
+  logger.error("uncaughtException", err);
+});
+
+process.on("unhandledRejection", reason => {
+  logger.error("unhandledRejection", reason);
+});
+
 const server = app.listen(PORT, () => {
-  console.log("WADPH Dashboard API running on port " + PORT);
+  logger.info("WADPH Dashboard API running", { port: PORT, logFile: logger.LOG_FILE });
 });
 
 const wss = new WebSocketServer({ server, path: "/api/terminal" });

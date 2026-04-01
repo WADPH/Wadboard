@@ -1,3 +1,6 @@
+import { exportConfigSnapshot, importConfigObject } from "./config.js";
+import { audit, error as logError, getRequestSource, readRecentLogs } from "./logger.js";
+
 export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
@@ -47,9 +50,37 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
       await pollHostInfoOnce();
       res.json({ ok: true });
     } catch (e) {
-      console.error("refresh error:", e);
+      logError("refresh error", e);
       res.status(500).json({ ok: false, error: "refresh_failed" });
     }
+  });
+
+  app.get("/api/config/export", requireAdmin, (req, res) => {
+    const snapshot = exportConfigSnapshot();
+    audit("config.export", "Configuration exported", getRequestSource(req));
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="wadboard-config-${new Date().toISOString().replace(/[:.]/g, "-")}.json"`);
+    res.send(JSON.stringify(snapshot, null, 2));
+  });
+
+  app.post("/api/config/import", requireAdmin, (req, res) => {
+    const result = importConfigObject(req.body, { req });
+    if (!result.ok) {
+      return res.status(result.error === "invalid_structure" ? 400 : 500).json(result);
+    }
+    return res.json({
+      ok: true,
+      backupFile: result.backupFile,
+      state: sanitizeForClient(true)
+    });
+  });
+
+  app.get("/api/logs", requireAdmin, (req, res) => {
+    const limit = Number(req.query.limit) || 200;
+    res.json({
+      ok: true,
+      lines: readRecentLogs(limit)
+    });
   });
 
   // -----------------------
@@ -76,6 +107,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
 
     db.services.push(newSvc);
     saveDB();
+    audit("service.create", `Service created: ${newSvc.name}`, getRequestSource(req), { id: newSvc.id });
     res.json(newSvc);
   });
 
@@ -94,6 +126,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     }
 
     saveDB();
+    audit("service.update", `Service updated: ${svc.name || id}`, getRequestSource(req), { id });
     res.json(svc);
   });
 
@@ -101,6 +134,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const { id } = req.params;
     db.services = db.services.filter(s => s.id !== id);
     saveDB();
+    audit("service.delete", `Service deleted: ${id}`, getRequestSource(req), { id });
     res.json({ ok: true });
   });
 
@@ -144,6 +178,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
 
     db.links.push(newLink);
     saveDB();
+    audit("link.create", `Link created: ${newLink.title}`, getRequestSource(req), { id: newLink.id });
     res.json(newLink);
   });
 
@@ -159,6 +194,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (notes !== undefined) lnk.notes = notes;
 
     saveDB();
+    audit("link.update", `Link updated: ${lnk.title || id}`, getRequestSource(req), { id });
     res.json(lnk);
   });
 
@@ -166,6 +202,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const { id } = req.params;
     db.links = db.links.filter(l => l.id !== id);
     saveDB();
+    audit("link.delete", `Link deleted: ${id}`, getRequestSource(req), { id });
     res.json({ ok: true });
   });
 
@@ -285,6 +322,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     // -----------------------
     db.wol.push(task);
     saveDB();
+    audit("wol.create", `WOL task created: ${task.name}`, getRequestSource(req), { id: task.id, type: task.type });
     res.json(task);
   });
 
@@ -359,6 +397,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     }
 
     saveDB();
+    audit("wol.update", `WOL task updated: ${task.name || id}`, getRequestSource(req), { id, type: task.type });
     res.json(task);
   });
 
@@ -366,6 +405,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const { id } = req.params;
     db.wol = db.wol.filter(a => a.id !== id);
     saveDB();
+    audit("wol.delete", `WOL task deleted: ${id}`, getRequestSource(req), { id });
     res.json({ ok: true });
   });
 
@@ -395,7 +435,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const task = db.wol.find(a => a.id === id);
     if (!task) return res.status(404).json({ error: "WOL task not found" });
 
-    const result = await executeWOLTask(task);
+    const result = await executeWOLTask(task, { source: getRequestSource(req) });
     res.json(result);
   });
 
@@ -408,7 +448,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const action = actions.find(a => a.id === actionId);
     if (!action) return res.status(404).json({ error: "SSH action not found" });
 
-    const result = await executeSSHAction(task, action);
+    const result = await executeSSHAction(task, action, { source: getRequestSource(req) });
     res.json(result);
   });
 
@@ -433,6 +473,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
 
     db.hostActions.push(newAction);
     saveDB();
+    audit("host-action.create", `Host action created: ${newAction.label}`, getRequestSource(req), { id: newAction.id });
     res.json(newAction);
   });
 
@@ -448,6 +489,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (notes   !== undefined) action.notes   = String(notes).trim();
 
     saveDB();
+    audit("host-action.update", `Host action updated: ${action.label || id}`, getRequestSource(req), { id });
     res.json(action);
   });
 
@@ -455,6 +497,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const { id } = req.params;
     db.hostActions = db.hostActions.filter(a => a.id !== id);
     saveDB();
+    audit("host-action.delete", `Host action deleted: ${id}`, getRequestSource(req), { id });
     res.json({ ok: true });
   });
 
@@ -463,7 +506,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     const action = db.hostActions.find(a => a.id === id);
     if (!action) return res.status(404).json({ error: "Host action not found" });
 
-    const result = await executeHostAction(action);
+    const result = await executeHostAction(action, { source: getRequestSource(req) });
     res.json(result);
   });
 
