@@ -749,83 +749,98 @@
     }
 
     terminalOpening = true;
-    if (terminalStatusEl) terminalStatusEl.textContent = "Connecting...";
+    if (terminalStatusEl) terminalStatusEl.textContent = "Checking terminal...";
 
-    const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/api/terminal";
-    const ws = new WebSocket(wsUrl);
-    ws.binaryType = "arraybuffer";
+    updateTerminalCapabilityStatus()
+      .then(status => {
+        if (status && !status.ok) {
+          terminalOpening = false;
+          return;
+        }
 
-    let ready = false;
+        if (terminalStatusEl) terminalStatusEl.textContent = "Connecting...";
 
-    ws.onmessage = evt => {
-      if (typeof evt.data === "string") {
-        try {
-          const msg = JSON.parse(evt.data);
-          if (msg && msg.type === "ready") {
-            ready = true;
-            terminalSocket = ws;
-            ensureTerminalInstance();
-            if (forceAuth && window.termInstance) window.termInstance.reset();
-            terminalOverlay.classList.remove("hidden");
-            if (terminalStatusEl) terminalStatusEl.textContent = "Connected";
-            if (terminalFitAddon) terminalFitAddon.fit();
-            if (window.termInstance) {
-              window.termInstance.focus();
-              window.termInstance.scrollToBottom();
+        const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/api/terminal";
+        const ws = new WebSocket(wsUrl);
+        ws.binaryType = "arraybuffer";
+
+        let ready = false;
+
+        ws.onmessage = evt => {
+          if (typeof evt.data === "string") {
+            try {
+              const msg = JSON.parse(evt.data);
+              if (msg && msg.type === "ready") {
+                ready = true;
+                terminalSocket = ws;
+                ensureTerminalInstance();
+                if (forceAuth && window.termInstance) window.termInstance.reset();
+                terminalOverlay.classList.remove("hidden");
+                if (terminalStatusEl) terminalStatusEl.textContent = "Connected";
+                if (terminalFitAddon) terminalFitAddon.fit();
+                if (window.termInstance) {
+                  window.termInstance.focus();
+                  window.termInstance.scrollToBottom();
+                }
+                terminalOpening = false;
+                return;
+              }
+              if (msg && msg.type === "closed") {
+                if (terminalStatusEl) terminalStatusEl.textContent = "Session closed";
+                terminalNeedsAuth = true;
+                if (terminalOverlay) terminalOverlay.classList.add("hidden");
+                return;
+              }
+            } catch {
+              // ignore
             }
+            return;
+          }
+
+          if (window.termInstance) {
+            window.termInstance.write(terminalDecoder.decode(evt.data));
+          }
+        };
+
+        ws.onclose = evt => {
+          if (!ready && evt.code === 4401 && !forceAuth) {
             terminalOpening = false;
+            ensureAdminThen(() => openTerminalModal(true));
             return;
           }
-          if (msg && msg.type === "closed") {
-            if (terminalStatusEl) terminalStatusEl.textContent = "Session closed";
-            terminalNeedsAuth = true;
-            if (terminalOverlay) terminalOverlay.classList.add("hidden");
-            return;
+
+          if (!ready && terminalStatusEl) {
+            terminalStatusEl.textContent = "Terminal unavailable";
+            if (evt.code === 1011) {
+              updateTerminalCapabilityStatus();
+            }
           }
-        } catch {
-          // ignore
-        }
-        return;
-      }
+          if (ready && terminalStatusEl) {
+            terminalStatusEl.textContent = "Disconnected";
+          }
 
-      if (window.termInstance) {
-        window.termInstance.write(terminalDecoder.decode(evt.data));
-      }
-    };
+          if (terminalSocket === ws) terminalSocket = null;
+          terminalOpening = false;
+        };
 
-    ws.onclose = evt => {
-      if (!ready && evt.code === 4401 && !forceAuth) {
+        ws.onerror = () => {
+          if (!ready && terminalStatusEl) terminalStatusEl.textContent = "Terminal error";
+        };
+      })
+      .catch(() => {
         terminalOpening = false;
-        ensureAdminThen(() => openTerminalModal(true));
-        return;
-      }
-
-      if (!ready && terminalStatusEl) {
-        terminalStatusEl.textContent = "Terminal unavailable";
-        if (evt.code === 1011) {
-          updateTerminalCapabilityStatus();
-        }
-      }
-      if (ready && terminalStatusEl) {
-        terminalStatusEl.textContent = "Disconnected";
-      }
-
-      if (terminalSocket === ws) terminalSocket = null;
-      terminalOpening = false;
-    };
-
-    ws.onerror = () => {
-      if (!ready && terminalStatusEl) terminalStatusEl.textContent = "Terminal error";
-    };
+        if (terminalStatusEl) terminalStatusEl.textContent = "Terminal unavailable";
+      });
   }
 
   async function updateTerminalCapabilityStatus() {
     if (!terminalStatusEl) return;
     const status = await apiGET("/terminal/status");
-    if (!status || status.ok) return;
-    if (status.missing === "script") {
-      terminalStatusEl.textContent = status.hint || "Install util-linux to enable terminal";
+    if (!status || status.ok) return status;
+    if (status.missing === "script" || status.missing === "shell") {
+      terminalStatusEl.textContent = status.hint || "Terminal prerequisites are missing";
     }
+    return status;
   }
 
   // ==============================
@@ -2439,13 +2454,17 @@ if (brandSaveBtn) {
       if (Number.isFinite(info.temperature)) chips.push(`<span class="host-chip"><b>Temp</b>${info.temperature}°C</span>`);
       if (Number.isFinite(info.percentage)) chips.push(`<span class="host-chip"><b>Charge</b>${info.percentage}%</span>`);
 
-      if (!chips.length) chips.push(`<span class="host-chip">No data</span>`);
+      if (!chips.length) {
+        const reason = info.lastError ? String(info.lastError) : "no_data";
+        chips.push(`<span class="host-chip">No data</span>`);
+        chips.push(`<span class="host-chip"><b>Reason</b>${reason}</span>`);
+      }
 
       box.innerHTML = chips.join("");
 
       upd.textContent = info.ok
         ? `Updated ${fmtShort(info.updatedAt)}`
-        : `Last attempt ${fmtShort(info.updatedAt)} — error`;
+        : `Last attempt ${fmtShort(info.updatedAt)} — ${info.lastError || "error"}`;
     } catch {
       const upd = document.getElementById("host-updated");
       const box = document.getElementById("host-stats");

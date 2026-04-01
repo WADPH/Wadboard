@@ -286,14 +286,14 @@ export function createTerminalModule({ authApi }) {
         }
 
         if (Buffer.isBuffer(data)) {
-          touchTerminal();
+          touchTerminal(terminalSession);
           try {
             terminalSession.shellProcess.stdin?.write(data);
           } catch {
             // ignore
           }
         } else if (data instanceof ArrayBuffer) {
-          touchTerminal();
+          touchTerminal(terminalSession);
           try {
             terminalSession.shellProcess.stdin?.write(Buffer.from(data));
           } catch {
