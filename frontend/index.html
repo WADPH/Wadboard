@@ -777,10 +777,6 @@
     flex-direction: column;
     gap: .55rem;
   }
-  .icon-picker-hint {
-    font-size: .74rem;
-    color: var(--text-dim);
-  }
   .icon-picker-preview {
     display: inline-flex;
     align-items: center;
@@ -799,9 +795,50 @@
   .icon-picker-preview .btn {
     pointer-events: none;
   }
-  .icon-picker-preview-empty {
-    color: var(--text-dim);
-    font-weight: 600;
+  .icon-picker-trigger {
+    width: fit-content;
+  }
+  .icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    gap: .6rem;
+  }
+  .icon-option {
+    cursor: pointer;
+    min-height: 68px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .55rem .35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface-alt);
+    color: var(--text-mid);
+    font-size: .68rem;
+    font-weight: 700;
+    text-align: center;
+    transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  }
+  .icon-option:hover {
+    border-color: var(--drag-ring);
+    color: var(--text-main);
+  }
+  .icon-option.active {
+    border-color: var(--drag-ring);
+    background: var(--drag-bg);
+    color: var(--text-main);
+  }
+  .icon-option .btn-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+  .icon-option-none {
+    font-size: .74rem;
+  }
+  .icon-picker-modal {
+    width: min(92vw, 760px);
   }
 
 
@@ -1437,9 +1474,9 @@
       <div class="field">
         <label class="label">Button icon (optional)</label>
         <div class="icon-picker-group">
-          <select class="input" id="host-icon"></select>
+          <input id="host-icon" type="hidden" />
+          <button class="btn icon-picker-trigger" id="host-icon-trigger" type="button">Choose Icon</button>
           <div class="icon-picker-preview" id="host-icon-preview"></div>
-          <div class="icon-picker-hint">If no icon is selected, the button will display its text label.</div>
         </div>
       </div>
 
@@ -1457,6 +1494,18 @@
     </form>
   </div>
 </div>
+</div>
+
+<div class="overlay hidden" id="icon-picker-overlay">
+  <div class="modal icon-picker-modal">
+    <div class="modal-top">
+      <div style="font-weight:800; font-size:.9rem; color:var(--text-main);">Choose Icon</div>
+      <button class="close" id="icon-picker-close" type="button">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="icon-picker-grid" id="icon-picker-grid"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Admin password modal (one-shot protected actions) -->
@@ -1772,9 +1821,13 @@
 
   const hostLabelInput   = document.getElementById("host-label");
   const hostIconInput    = document.getElementById("host-icon");
+  const hostIconTrigger  = document.getElementById("host-icon-trigger");
   const hostIconPreview  = document.getElementById("host-icon-preview");
   const hostCommandInput = document.getElementById("host-command");
   const hostNotesInput   = document.getElementById("host-notes");
+  const iconPickerOverlay= document.getElementById("icon-picker-overlay");
+  const iconPickerCloseBtn = document.getElementById("icon-picker-close");
+  const iconPickerGrid   = document.getElementById("icon-picker-grid");
 
   const settingsOverlay       = document.getElementById("settings-overlay");
   const settingsCloseBtn      = document.getElementById("settings-close");
@@ -1972,10 +2025,18 @@
     { key: "lock", label: "Lock", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V4a3.5 3.5 0 1 1 7 0v2h.5A1.5 1.5 0 0 1 13.5 7.5v6A1.5 1.5 0 0 1 12 15H4A1.5 1.5 0 0 1 2.5 13.5v-6A1.5 1.5 0 0 1 4 6zm1 0h5V4a2.5 2.5 0 0 0-5 0z"></path></svg>` },
     { key: "search", label: "Search", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M11.742 10.344a6 6 0 1 0-1.398 1.398l2.978 2.978a1 1 0 0 0 1.414-1.414zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"></path></svg>` },
     { key: "folder", label: "Folder", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.1a1.5 1.5 0 0 1 1.06.44l.9.9a.5.5 0 0 0 .35.15H13A1.5 1.5 0 0 1 14.5 4.5v7A1.5 1.5 0 0 1 13 13H3A1.5 1.5 0 0 1 1.5 11.5z"></path></svg>` },
+    { key: "home", label: "Home", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m8 3.293 5 5V13.5a.5.5 0 0 1-.5.5H9.5v-3h-3v3H3.5a.5.5 0 0 1-.5-.5V8.293z"></path><path d="M7.293 1.646a1 1 0 0 1 1.414 0l5.5 5.5a.5.5 0 0 1-.707.708L13 7.354V13.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5V7.354l-.5.5a.5.5 0 1 1-.707-.708z"></path></svg>` },
+    { key: "globe", label: "Globe", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14m4.93-6h-2.1a12.6 12.6 0 0 1-.52 3.01A6.02 6.02 0 0 0 12.93 9m-3.66 3.63c.2-.66.42-1.63.53-2.63H6.2c.11 1 .33 1.97.53 2.63a5.95 5.95 0 0 0 2.54 0M5.69 12.01A12.6 12.6 0 0 1 5.17 9h-2.1a6.02 6.02 0 0 0 2.62 3.01M3.07 8h2.1c.04-1.08.2-2.08.52-3.01A6.02 6.02 0 0 0 3.07 8m3.66-3.63A11.5 11.5 0 0 0 6.2 8h3.6c-.11-1-.33-1.97-.53-2.63a5.95 5.95 0 0 0-2.54 0m3.58.62c.32.93.48 1.93.52 3.01h2.1a6.02 6.02 0 0 0-2.62-3.01"></path></svg>` },
+    { key: "shield", label: "Shield", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c-.69 0-1.37.12-2.03.35L3.2 1.28A1.5 1.5 0 0 0 2 2.7v3.78c0 3.37 2.15 6.36 5.35 7.42a2 2 0 0 0 1.3 0C11.85 12.84 14 9.85 14 6.48V2.7a1.5 1.5 0 0 0-1.2-1.47L10.03.35A6.4 6.4 0 0 0 8 0"></path></svg>` },
+    { key: "bell", label: "Bell", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a4 4 0 0 0-4 4v2.086l-.707.707A1 1 0 0 0 4 9.5h8a1 1 0 0 0 .707-1.707L12 7.086V5a4 4 0 0 0-4-4m0 14a2 2 0 0 0 1.995-1.85L10 13H6a2 2 0 0 0 2 2"></path></svg>` },
+    { key: "camera", label: "Camera", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2a.5.5 0 0 1 .354.146L11.707 3H13.5A1.5 1.5 0 0 1 15 4.5v7A1.5 1.5 0 0 1 13.5 13h-11A1.5 1.5 0 0 1 1 11.5v-7A1.5 1.5 0 0 1 2.5 3h1.793l.853-.854A.5.5 0 0 1 5.5 2zM8 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"></path></svg>` },
+    { key: "trash", label: "Trash", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 5.5a.5.5 0 0 1 1 0v6a.5.5 0 0 1-1 0zm4 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"></path><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1 0-2H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1"></path></svg>` },
+    { key: "edit", label: "Edit", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zM13.5 6.207 9.793 2.5 3 9.293V13h3.707z"></path></svg>` },
     { key: "moon", label: "Moon", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 0a.5.5 0 0 1 .46.694A6.5 6.5 0 1 0 15.306 9.54.5.5 0 0 1 16 10a7.5 7.5 0 1 1-10-10 .5.5 0 0 1 0 0"></path></svg>` },
     { key: "sun", label: "Sun", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0-3a.5.5 0 0 1 .5.5V3a.5.5 0 0 1-1 0V1.5A.5.5 0 0 1 8 1m0 12a.5.5 0 0 1 .5.5V15a.5.5 0 0 1-1 0v-1.5A.5.5 0 0 1 8 13m7-5.5a.5.5 0 0 1-.5.5H13a.5.5 0 0 1 0-1h1.5a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5H1a.5.5 0 0 1 0-1h1.5A.5.5 0 0 1 3 8m9.657-4.657a.5.5 0 0 1 0 .707L11.596 5.11a.5.5 0 1 1-.707-.707l1.06-1.06a.5.5 0 0 1 .708 0M5.11 10.889a.5.5 0 0 1 0 .707l-1.06 1.06a.5.5 0 0 1-.708-.707l1.061-1.06a.5.5 0 0 1 .707 0m7.546 1.767a.5.5 0 0 1-.707 0l-1.06-1.06a.5.5 0 1 1 .707-.707l1.06 1.06a.5.5 0 0 1 0 .707M5.11 5.11a.5.5 0 0 1-.707 0L3.343 4.05a.5.5 0 1 1 .707-.707l1.06 1.06a.5.5 0 0 1 0 .707"></path></svg>` }
   ];
   const ACTION_ICON_MAP = Object.fromEntries(ACTION_ICON_OPTIONS.filter(opt => opt.key).map(opt => [opt.key, opt]));
+  let activeIconPicker = null;
 
   function getActionIconDefinition(iconKey) {
     return ACTION_ICON_MAP[String(iconKey || "").trim()] || null;
@@ -2023,23 +2084,14 @@
     linkEl.textContent = safeText;
   }
 
-  function populateActionIconSelect(selectEl) {
-    if (!selectEl || selectEl.dataset.populated === "true") return;
-    ACTION_ICON_OPTIONS.forEach(opt => {
-      const option = document.createElement("option");
-      option.value = opt.key;
-      option.textContent = opt.label;
-      selectEl.appendChild(option);
-    });
-    selectEl.dataset.populated = "true";
-  }
-
   function renderActionIconPreview(container, iconKey, labelText = "Preview") {
     if (!container) return;
     container.innerHTML = "";
     const iconDef = getActionIconDefinition(iconKey);
     if (!iconDef) {
-      container.innerHTML = `<span class="icon-picker-preview-empty">Text label will be shown on the button.</span>`;
+      const previewText = document.createElement("span");
+      previewText.textContent = String(labelText || "Button label");
+      container.appendChild(previewText);
       return;
     }
 
@@ -2054,6 +2106,58 @@
 
     container.appendChild(btn);
     container.appendChild(caption);
+  }
+
+  function setIconValue(target, iconKey) {
+    if (!target) return;
+    const value = String(iconKey || "").trim();
+    if ("value" in target) {
+      target.value = value;
+    } else {
+      target.dataset.icon = value;
+    }
+  }
+
+  function getIconValue(target) {
+    if (!target) return "";
+    if ("value" in target) return String(target.value || "").trim();
+    return String(target.dataset.icon || "").trim();
+  }
+
+  function closeIconPicker() {
+    activeIconPicker = null;
+    if (iconPickerOverlay) iconPickerOverlay.classList.add("hidden");
+  }
+
+  function renderIconPickerGrid(selectedKey) {
+    if (!iconPickerGrid) return;
+    iconPickerGrid.innerHTML = "";
+    ACTION_ICON_OPTIONS.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "icon-option" + (opt.key === selectedKey ? " active" : "");
+      if (!opt.key) {
+        btn.classList.add("icon-option-none");
+        btn.textContent = "No icon";
+      } else {
+        btn.innerHTML = `${opt.svg}<span>${opt.label}</span>`;
+      }
+      btn.addEventListener("click", () => {
+        if (!activeIconPicker) return;
+        setIconValue(activeIconPicker.input, opt.key);
+        if (activeIconPicker.preview) {
+          renderActionIconPreview(activeIconPicker.preview, opt.key, activeIconPicker.getLabel());
+        }
+        closeIconPicker();
+      });
+      iconPickerGrid.appendChild(btn);
+    });
+  }
+
+  function openIconPicker(config) {
+    activeIconPicker = config;
+    renderIconPickerGrid(getIconValue(config.input));
+    if (iconPickerOverlay) iconPickerOverlay.classList.remove("hidden");
   }
 
   function showToast({ title, message, detail, type = "success", ttl = 5000 }) {
@@ -3045,11 +3149,15 @@ batterySaveBtn.addEventListener("click", async () => {
     labelInput.value = action.label || "";
     labelInput.dataset.field = "label";
 
-    const iconSelect = document.createElement("select");
-    iconSelect.className = "input ssh-input";
-    iconSelect.dataset.field = "icon";
-    populateActionIconSelect(iconSelect);
-    iconSelect.value = action.icon || "";
+    const iconInput = document.createElement("input");
+    iconInput.type = "hidden";
+    iconInput.dataset.field = "icon";
+    iconInput.value = action.icon || "";
+
+    const iconTrigger = document.createElement("button");
+    iconTrigger.type = "button";
+    iconTrigger.className = "btn icon-picker-trigger";
+    iconTrigger.textContent = "Choose Icon";
 
     const iconPreview = document.createElement("div");
     iconPreview.className = "icon-picker-preview";
@@ -3091,10 +3199,16 @@ batterySaveBtn.addEventListener("click", async () => {
     cmdInput.dataset.field = "command";
 
     function syncIconPreview() {
-      renderActionIconPreview(iconPreview, iconSelect.value, labelInput.value.trim() || "SSH Action");
+      renderActionIconPreview(iconPreview, iconInput.value, labelInput.value.trim() || "SSH Action");
     }
     labelInput.addEventListener("input", syncIconPreview);
-    iconSelect.addEventListener("change", syncIconPreview);
+    iconTrigger.addEventListener("click", () => {
+      openIconPicker({
+        input: iconInput,
+        preview: iconPreview,
+        getLabel: () => labelInput.value.trim() || "SSH Action"
+      });
+    });
     syncIconPreview();
 
     const removeBtn = document.createElement("button");
@@ -3108,7 +3222,8 @@ batterySaveBtn.addEventListener("click", async () => {
 
     row.appendChild(title);
     row.appendChild(labelInput);
-    row.appendChild(iconSelect);
+    row.appendChild(iconInput);
+    row.appendChild(iconTrigger);
     row.appendChild(iconPreview);
     row.appendChild(userInput);
     row.appendChild(hostInput);
@@ -3139,7 +3254,7 @@ batterySaveBtn.addEventListener("click", async () => {
     const rows = wolSshList.querySelectorAll(".ssh-row");
     rows.forEach(row => {
       const label = row.querySelector("input[data-field='label']").value.trim();
-      const icon  = row.querySelector("select[data-field='icon']").value.trim();
+      const icon  = row.querySelector("input[data-field='icon']").value.trim();
       const user  = row.querySelector("input[data-field='user']").value.trim();
       const host  = row.querySelector("input[data-field='host']").value.trim();
       const pass  = row.querySelector("input[data-field='pass']").value;
@@ -3354,10 +3469,13 @@ formWol.addEventListener("submit", async e => {
   await loadStateFromServer();
 });
 
-  populateActionIconSelect(hostIconInput);
-  if (hostIconInput) {
-    hostIconInput.addEventListener("change", () => {
-      renderActionIconPreview(hostIconPreview, hostIconInput.value, hostLabelInput.value.trim() || "Preview");
+  if (hostIconTrigger) {
+    hostIconTrigger.addEventListener("click", () => {
+      openIconPicker({
+        input: hostIconInput,
+        preview: hostIconPreview,
+        getLabel: () => hostLabelInput.value.trim() || "Preview"
+      });
     });
   }
   if (hostLabelInput) {
@@ -3366,6 +3484,12 @@ formWol.addEventListener("submit", async e => {
     });
   }
   renderActionIconPreview(hostIconPreview, hostIconInput ? hostIconInput.value : "", "Preview");
+  if (iconPickerCloseBtn) iconPickerCloseBtn.addEventListener("click", closeIconPicker);
+  if (iconPickerOverlay) {
+    iconPickerOverlay.addEventListener("click", (e) => {
+      if (e.target === iconPickerOverlay) closeIconPicker();
+    });
+  }
 
 if (brandSaveBtn) {
   brandSaveBtn.addEventListener("click", async () => {
@@ -3824,7 +3948,7 @@ if (brandSaveBtn) {
     // Run WOL always visible, password-protected when not in edit mode
     const runBtn = document.createElement("button");
     runBtn.className = "btn";
-    runBtn.textContent = "Run";
+    setButtonContentWithOptionalIcon(runBtn, "play", `Run ${w.name}`);
     runBtn.onclick = () => ensureAdminThen(() => runWol(w.id));
     right.appendChild(runBtn);
 
