@@ -2,7 +2,7 @@ import fs from "fs";
 import { spawn } from "child_process";
 
 export function createTerminalModule({ authApi }) {
-  const SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
+  const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
 
   function isAndroidLike() {
     const platform = String(process.platform || "");
@@ -32,12 +32,12 @@ export function createTerminalModule({ authApi }) {
   function resolveShellPath() {
     const candidates = [];
     if (process.env.SHELL) candidates.push(process.env.SHELL);
-    if (isAndroidLike()) candidates.push(SHELL_BIN);
+    if (isAndroidLike()) candidates.push(TERMUX_SHELL_BIN);
     candidates.push("/bin/bash", "/bin/sh");
     for (const c of candidates) {
       if (c && fs.existsSync(c)) return c;
     }
-    return "sh";
+    return null;
   }
 
   function resolveScriptPath() {
@@ -54,6 +54,16 @@ export function createTerminalModule({ authApi }) {
   }
 
   function getTerminalCapability() {
+    const shellPath = resolveShellPath();
+    if (!shellPath) {
+      return {
+        ok: false,
+        missing: "shell",
+        hint: isAndroidLike()
+          ? "Install bash or set SHELL to a valid shell path"
+          : "Install bash/sh or set SHELL to a valid shell path"
+      };
+    }
     const scriptPath = resolveScriptPath();
     if (!scriptPath) {
       return {
@@ -107,8 +117,9 @@ export function createTerminalModule({ authApi }) {
     }
 
     const shellPath = resolveShellPath();
+    if (!shellPath) return null;
     const env = { ...process.env, TERM: "xterm-256color" };
-    const cwd = process.env.HOME || "/";
+    const cwd = process.env.HOME || process.cwd();
     const cap = getTerminalCapability();
     if (!cap.ok) return null;
     const scriptPath = resolveScriptPath();
@@ -139,6 +150,11 @@ export function createTerminalModule({ authApi }) {
       buffer: "",
       token
     };
+
+    shellProcess.on("error", err => {
+      console.error("terminal shell error:", err && err.message ? err.message : err);
+      stopTerminalSession(session, "error");
+    });
 
     const appendBuffer = chunk => {
       if (!session) return;

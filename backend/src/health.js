@@ -8,8 +8,8 @@ export function createHealthModule({ dbApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const getBatteryAlertsConfig = dbApi.getBatteryAlertsConfig;
-  const INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
-  const SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
+  const DEFAULT_INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
+  const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
 
   // -----------------------
   // Health check helpers
@@ -179,6 +179,30 @@ export function createHealthModule({ dbApi }) {
     };
   }
 
+  function resolveInfoScriptPath() {
+    const candidates = [
+      process.env.WADBOARD_INFO_SCRIPT,
+      DEFAULT_INFO_SCRIPT
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    }
+    return candidates[0] || null;
+  }
+
+  function resolveInfoShellPath() {
+    const candidates = [
+      process.env.SHELL,
+      TERMUX_SHELL_BIN,
+      "/bin/bash",
+      "/bin/sh"
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
   // -----------------------
   // Battery alerts (Telegram)
   // -----------------------
@@ -265,7 +289,24 @@ export function createHealthModule({ dbApi }) {
 
   function pollHostInfoOnce() {
     return new Promise((resolve) => {
-      exec(`${INFO_SCRIPT}`, { shell: SHELL_BIN, timeout: 4000 }, (err, stdout) => {
+      const infoScriptPath = resolveInfoScriptPath();
+      const infoShellPath = resolveInfoShellPath();
+
+      if (!infoScriptPath || !fs.existsSync(infoScriptPath)) {
+        hostInfo.ok = false;
+        hostInfo.lastError = "info_script_missing";
+        hostInfo.updatedAt = new Date().toISOString();
+        return resolve(false);
+      }
+
+      if (!infoShellPath) {
+        hostInfo.ok = false;
+        hostInfo.lastError = "shell_not_found";
+        hostInfo.updatedAt = new Date().toISOString();
+        return resolve(false);
+      }
+
+      exec(`${infoScriptPath}`, { shell: infoShellPath, timeout: 4000 }, (err, stdout) => {
         if (err) {
           hostInfo.ok = false;
           hostInfo.lastError = String(err.message || err);
