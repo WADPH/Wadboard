@@ -227,7 +227,6 @@ export function createActionsModule({ dbApi }) {
   // -----------------------
   // Local host actions execution (Termux)
   // -----------------------
-  const INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
   const SHELL_BIN   = "/data/data/com.termux/files/usr/bin/bash";
 
   function executeHostAction(action, context = {}) {

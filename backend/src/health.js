@@ -9,8 +9,6 @@ export function createHealthModule({ dbApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const getBatteryAlertsConfig = dbApi.getBatteryAlertsConfig;
-  const DEFAULT_INFO_SCRIPT = "/data/data/com.termux/files/home/scripts/info.sh";
-  const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
 
   // -----------------------
   // Health check helpers
@@ -146,6 +144,7 @@ export function createHealthModule({ dbApi }) {
 
 
   let hostInfo = {
+    platform: null,
     ip: null,
     rssi: null,
     ssid: null,
@@ -153,56 +152,11 @@ export function createHealthModule({ dbApi }) {
     status: null,
     temperature: null,
     percentage: null,
+    uptimeSec: null,
     updatedAt: null,
     ok: false,
     lastError: null
   };
-
-  function parseInfoOutput(text) {
-    const out = {};
-    const re = /^\s*"([^"]+)"\s*:\s*(.+?)(,|\s*$)/gm;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const k = m[1];
-      let v = m[2].trim();
-      if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-      if (!isNaN(Number(v))) v = Number(v);
-      out[k] = v;
-    }
-    return {
-      ip:          out.ip ?? null,
-      rssi:        out.rssi ?? null,
-      ssid:        out.ssid ?? null,
-      health:      out.health ?? null,
-      status:      out.status ?? null,
-      temperature: out.temperature ?? null,
-      percentage:  out.percentage ?? null
-    };
-  }
-
-  function resolveInfoScriptPath() {
-    const candidates = [
-      process.env.WADBOARD_INFO_SCRIPT,
-      DEFAULT_INFO_SCRIPT
-    ].filter(Boolean);
-    for (const candidate of candidates) {
-      if (candidate && fs.existsSync(candidate)) return candidate;
-    }
-    return candidates[0] || null;
-  }
-
-  function resolveInfoShellPath() {
-    const candidates = [
-      process.env.SHELL,
-      TERMUX_SHELL_BIN,
-      "/bin/bash",
-      "/bin/sh"
-    ].filter(Boolean);
-    for (const candidate of candidates) {
-      if (candidate && fs.existsSync(candidate)) return candidate;
-    }
-    return null;
-  }
 
   // -----------------------
   // Battery alerts (Telegram)
@@ -288,51 +242,192 @@ export function createHealthModule({ dbApi }) {
     }
   }
 
-  function pollHostInfoOnce() {
-    return new Promise((resolve) => {
-      const infoScriptPath = resolveInfoScriptPath();
-      const infoShellPath = resolveInfoShellPath();
+  async function getTermuxWifiInfo() {
+    const r = await execCmd("termux-wifi-connectioninfo", { timeoutMs: 1500 });
+    if (!r.ok) {
+      return {
+        available: false,
+        missing: !!r.missing,
+        hint: r.error || "termux-wifi-connectioninfo failed"
+      };
+    }
 
-      if (!infoScriptPath || !fs.existsSync(infoScriptPath)) {
-        hostInfo.ok = false;
-        hostInfo.lastError = "info_script_missing";
-        hostInfo.updatedAt = new Date().toISOString();
-        return resolve(false);
-      }
+    try {
+      const j = JSON.parse(r.stdout || "{}");
+      const rssi = Number(j.rssi);
+      return {
+        available: true,
+        ip: typeof j.ip === "string" ? j.ip : null,
+        ssid: typeof j.ssid === "string" ? j.ssid : null,
+        rssi: Number.isFinite(rssi) ? rssi : null
+      };
+    } catch {
+      return {
+        available: false,
+        hint: "termux-wifi-connectioninfo returned invalid JSON"
+      };
+    }
+  }
 
-      if (!infoShellPath) {
-        hostInfo.ok = false;
-        hostInfo.lastError = "shell_not_found";
-        hostInfo.updatedAt = new Date().toISOString();
-        return resolve(false);
-      }
+  async function getTermuxBatteryDetails() {
+    const r = await execCmd("termux-battery-status", { timeoutMs: 1500 });
+    if (!r.ok) {
+      return {
+        available: false,
+        missing: !!r.missing,
+        hint: r.error || "termux-battery-status failed"
+      };
+    }
 
-      exec(`${infoScriptPath}`, { shell: infoShellPath, timeout: 4000 }, (err, stdout) => {
-        if (err) {
-          hostInfo.ok = false;
-          hostInfo.lastError = String(err.message || err);
-          hostInfo.updatedAt = new Date().toISOString();
-          return resolve(false);
+    try {
+      const j = JSON.parse(r.stdout || "{}");
+      const pct = Number(j.percentage);
+      const temp = Number(j.temperature);
+      return {
+        available: true,
+        health: typeof j.health === "string" ? j.health : null,
+        status: typeof j.status === "string" ? j.status : null,
+        percentage: Number.isFinite(pct) ? pct : null,
+        temperature: Number.isFinite(temp) ? temp : null
+      };
+    } catch {
+      return {
+        available: false,
+        hint: "termux-battery-status returned invalid JSON"
+      };
+    }
+  }
+
+  async function getHostTemperatureC() {
+    // Linux/Android thermal zones
+    try {
+      const zones = await execCmd("cat /sys/class/thermal/thermal_zone*/temp", { timeoutMs: 1500 });
+      if (zones.ok) {
+        const values = String(zones.stdout || "")
+          .split(/\r?\n/)
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(v => Number(v))
+          .filter(Number.isFinite)
+          .map(v => (v > 1000 ? v / 1000 : v))
+          .filter(v => v > -50 && v < 150);
+
+        if (values.length) {
+          const hottest = Math.max(...values);
+          return Math.round(hottest * 10) / 10;
         }
-        const parsed = parseInfoOutput(stdout || "");
-        hostInfo = {
-          ...hostInfo,
-          ...parsed,
-          ok: true,
-          lastError: null,
-          updatedAt: new Date().toISOString()
+      }
+    } catch {
+      // ignore
+    }
+
+    // lm-sensors fallback
+    try {
+      const sensors = await execCmd("sensors -j", { timeoutMs: 1500 });
+      if (sensors.ok) {
+        const walk = (node, acc) => {
+          if (!node || typeof node !== "object") return acc;
+          for (const [k, v] of Object.entries(node)) {
+            if (typeof v === "number" && /temp\d+_input/i.test(k)) {
+              if (v > -50 && v < 150) acc.push(v);
+            } else if (v && typeof v === "object") {
+              walk(v, acc);
+            }
+          }
+          return acc;
         };
-
-        // After host info is updated, check battery alerts
-        try {
-          checkBatteryAlerts();
-        } catch (e) {
-          logError("checkBatteryAlerts error", e);
+        const parsed = JSON.parse(sensors.stdout || "{}");
+        const temps = walk(parsed, []);
+        if (temps.length) {
+          const hottest = Math.max(...temps);
+          return Math.round(hottest * 10) / 10;
         }
+      }
+    } catch {
+      // ignore
+    }
 
-        resolve(true);
-      });
-    });
+    return null;
+  }
+
+  function isTermuxRuntime() {
+    const prefix = String(process.env.PREFIX || "");
+    return !!(
+      process.env.TERMUX_VERSION ||
+      prefix.includes("/data/data/com.termux/files/usr") ||
+      fs.existsSync("/data/data/com.termux/files/usr/bin/termux-info") ||
+      fs.existsSync("/data/data/com.termux/files/usr/bin/termux-battery-status")
+    );
+  }
+
+  async function collectHostInfo() {
+    const isTermux = isTermuxRuntime();
+    const info = {
+      platform: isTermux ? "termux" : os.platform(),
+      ip: getPrimaryIPv4(),
+      rssi: null,
+      ssid: null,
+      health: null,
+      status: null,
+      temperature: null,
+      percentage: null,
+      uptimeSec: Math.floor(os.uptime())
+    };
+
+    if (isTermux) {
+      const [wifi, battery] = await Promise.all([
+        getTermuxWifiInfo(),
+        getTermuxBatteryDetails()
+      ]);
+
+      if (wifi.available) {
+        if (wifi.ip) info.ip = wifi.ip;
+        info.rssi = wifi.rssi;
+        info.ssid = wifi.ssid;
+      }
+
+      if (battery.available) {
+        info.health = battery.health;
+        info.status = battery.status;
+        info.temperature = battery.temperature;
+        info.percentage = battery.percentage;
+      }
+
+      // If battery temp is missing, try generic thermal sensors.
+      if (!Number.isFinite(info.temperature)) {
+        info.temperature = await getHostTemperatureC();
+      }
+    } else {
+      info.temperature = await getHostTemperatureC();
+    }
+
+    return info;
+  }
+
+  async function pollHostInfoOnce() {
+    try {
+      const parsed = await collectHostInfo();
+      hostInfo = {
+        ...hostInfo,
+        ...parsed,
+        ok: true,
+        lastError: null,
+        updatedAt: new Date().toISOString()
+      };
+
+      // After host info is updated, check battery alerts
+      try {
+        checkBatteryAlerts();
+      } catch (e) {
+        logError("checkBatteryAlerts error", e);
+      }
+      return true;
+    } catch (err) {
+      hostInfo.ok = false;
+      hostInfo.lastError = String((err && err.message) || err || "hostinfo_failed");
+      hostInfo.updatedAt = new Date().toISOString();
+      return false;
+    }
   }
 
   // initial poll + interval
