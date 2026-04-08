@@ -2619,7 +2619,6 @@ if (brandSaveBtn) {
       const chips = [];
 
       if (info.ip) chips.push(`<span class="host-chip"><b>IP</b>${info.ip}</span>`);
-      if (Number.isFinite(info.uptimeSec)) chips.push(`<span class="host-chip"><b>Uptime</b>${fmtUptime(info.uptimeSec)}</span>`);
       if (Number.isFinite(info.rssi)) chips.push(`<span class="host-chip"><b>RSSI</b>${info.rssi} dBm</span>`);
       if (info.ssid) chips.push(`<span class="host-chip"><b>SSID</b>${info.ssid}</span>`);
       if (info.health) chips.push(`<span class="host-chip"><b>Battery</b>${info.health}</span>`);
