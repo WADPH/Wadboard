@@ -199,10 +199,17 @@ cd backend
 npm ci
 ```
 
-### 3. Start the backend
+### 3. Start the backend manually
 
+Manually
 ```bash
 node server.js
+```
+
+With pm2
+```bash
+cd .. # Go to the root folder
+./init.pm2.sh
 ```
 
 The backend listens on port `4000` by default and serves the frontend from `../frontend`.
