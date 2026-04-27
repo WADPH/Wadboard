@@ -778,6 +778,16 @@
 
     updateTerminalCapabilityStatus()
       .then(status => {
+        if (status && status.unauthorized) {
+          terminalOpening = false;
+          terminalNeedsAuth = true;
+          ensureAdminThen(() => {
+            terminalNeedsAuth = false;
+            openTerminalModal(true);
+          }, { force: true });
+          return;
+        }
+
         if (status && !status.ok) {
           terminalOpening = false;
           return;
@@ -830,7 +840,11 @@
         ws.onclose = evt => {
           if (!ready && evt.code === 4401 && !forceAuth) {
             terminalOpening = false;
-            ensureAdminThen(() => openTerminalModal(true));
+            terminalNeedsAuth = true;
+            ensureAdminThen(() => {
+              terminalNeedsAuth = false;
+              openTerminalModal(true);
+            }, { force: true });
             return;
           }
 
@@ -860,7 +874,13 @@
 
   async function updateTerminalCapabilityStatus() {
     if (!terminalStatusEl) return;
-    const status = await apiGET("/terminal/status");
+    const res = await fetch(API_BASE + "/terminal/status", {
+      credentials: "include"
+    });
+    if (res.status === 401) {
+      return { ok: false, unauthorized: true };
+    }
+    const status = await res.json().catch(() => ({}));
     if (!status || status.ok) return status;
     if (status.missing === "script" || status.missing === "shell") {
       terminalStatusEl.textContent = status.hint || "Terminal prerequisites are missing";
