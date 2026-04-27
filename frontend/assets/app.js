@@ -755,7 +755,7 @@
     if (terminalOpening) return;
     if (!terminalOverlay) return;
 
-    if (terminalNeedsAuth && !forceAuth) {
+    if ((terminalNeedsAuth || !editMode) && !forceAuth) {
       ensureAdminThen(() => {
         terminalNeedsAuth = false;
         openTerminalModal(true);
