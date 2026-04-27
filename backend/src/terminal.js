@@ -214,11 +214,15 @@ export function createTerminalModule({ authApi }) {
   }
 
   function registerRoutes(app) {
-    const { requireAdmin } = authApi;
+    const { requireViewAccess, getSession } = authApi;
 
-    app.get("/api/terminal/status", requireAdmin, (req, res) => {
+    app.get("/api/terminal/status", requireViewAccess, (req, res) => {
       const cap = getTerminalCapability();
-      res.json(cap);
+      const authorized = !!getSession(req);
+      res.json({
+        ...cap,
+        authRequired: !authorized
+      });
     });
 
   }

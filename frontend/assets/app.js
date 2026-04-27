@@ -778,6 +778,16 @@
 
     updateTerminalCapabilityStatus()
       .then(status => {
+        if (status && status.authRequired && !forceAuth) {
+          terminalOpening = false;
+          terminalNeedsAuth = true;
+          ensureAdminThen(() => {
+            terminalNeedsAuth = false;
+            openTerminalModal(true);
+          }, { force: true });
+          return;
+        }
+
         if (status && status.unauthorized) {
           terminalOpening = false;
           terminalNeedsAuth = true;
