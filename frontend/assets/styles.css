@@ -596,19 +596,45 @@
     grid-column: 2;
   }
 
+  .footer-version,
   .footer-github {
-    grid-column: 3;
-    justify-self: end;
     display: inline-flex;
     align-items: center;
     gap: .35rem;
     text-decoration: none;
     color: var(--text-dim);
     font-weight: 700;
+    transition: color var(--transition-fast);
   }
 
+  .footer-version {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .footer-version-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: .64rem;
+    color: var(--text-dim);
+  }
+
+  .footer-version-value {
+    color: var(--text-mid);
+  }
+
+  .footer-version:hover,
   .footer-github:hover {
     color: var(--text-main);
+  }
+
+  .footer-version:hover .footer-version-value {
+    color: var(--text-main);
+  }
+
+  .footer-github {
+    grid-column: 3;
+    justify-self: end;
   }
 
   .footer-github svg {
@@ -660,6 +686,7 @@
       grid-column: auto;
     }
 
+    .footer-version,
     .footer-github {
       grid-column: auto;
       justify-self: center;

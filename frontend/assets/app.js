@@ -10,6 +10,7 @@
   let viewAccessGranted = true;
   let appStarted = false;
   let isSyncingAccessSwitch = false;
+  const VERSION_FILE_PATH = "/version.json";
 
   // modal mode for Add/Edit forms
   let mode = { type: "service", action: "create", id: null };
@@ -169,6 +170,48 @@
   const logsRefreshBtn        = document.getElementById("logs-refresh-btn");
   const logsStatusEl          = document.getElementById("logs-status");
   const logsViewerEl          = document.getElementById("logs-viewer");
+  const footerVersionLinks    = Array.from(document.querySelectorAll(".footer-version"));
+
+  function normalizeVersionInfo(payload) {
+    if (!payload || typeof payload !== "object") return null;
+
+    const version = typeof payload.version === "string" ? payload.version.trim() : "";
+    const link = typeof payload.link === "string" ? payload.link.trim() : "";
+
+    if (!version) return null;
+    return { version, link };
+  }
+
+  function applyVersionInfo(info) {
+    footerVersionLinks.forEach((linkEl) => {
+      const valueEl = linkEl.querySelector(".footer-version-value");
+      if (valueEl) valueEl.textContent = info.version;
+
+      if (info.link) {
+        linkEl.href = info.link;
+        linkEl.setAttribute("aria-label", `Project version ${info.version}`);
+      } else {
+        linkEl.removeAttribute("href");
+        linkEl.setAttribute("aria-label", `Project version ${info.version}`);
+      }
+
+      linkEl.classList.remove("hidden");
+    });
+  }
+
+  async function loadVersionInfo() {
+    try {
+      const res = await fetch(VERSION_FILE_PATH, { cache: "no-store" });
+      if (!res.ok) return;
+
+      const payload = await res.json().catch(() => null);
+      const info = normalizeVersionInfo(payload);
+      if (!info) return;
+      applyVersionInfo(info);
+    } catch {
+      // Ignore version widget failures and keep the footer clean.
+    }
+  }
 
   // ==============================
   // THEME
@@ -2919,6 +2962,7 @@ if (brandSaveBtn) {
   }
 
   (async function init() {
+    await loadVersionInfo();
     const status = await loadAccessStatus();
     if (status.privateMode && !status.authorized) {
       showAccessOverlay("");
