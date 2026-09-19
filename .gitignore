@@ -1,6 +1,7 @@
 *.log
 /backend/wadph-data.json
 /backend/*-wadph-data.json
+/backend/.secret.key
 
 /backend/node_modules/
 npm-debug.log*

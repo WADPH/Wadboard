@@ -1,15 +1,10 @@
 import fs from "fs";
 import { spawn } from "child_process";
 import { error as logError, info as logInfo } from "./logger.js";
+import { isAndroidLike } from "./platform.js";
 
 export function createTerminalModule({ authApi }) {
   const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
-
-  function isAndroidLike() {
-    const platform = String(process.platform || "");
-    const release = String(process.release?.name || "");
-    return platform === "android" || /android/i.test(release) || !!process.env.ANDROID_ROOT;
-  }
 
   const TERMINAL_IDLE_MS = 15 * 60 * 1000;
   const TERMINAL_IDLE_CHECK_MS = 15000;

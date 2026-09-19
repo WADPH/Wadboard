@@ -1,6 +1,16 @@
 import { exportConfigSnapshot, importConfigObject } from "./config.js";
 import { audit, error as logError, getRequestSource, readRecentLogs } from "./logger.js";
 
+// Blocks script-executing URL schemes (javascript:, data:, vbscript:) from being
+// stored as a service/link target. The frontend renders these values straight
+// into an <a href>, so an unfiltered javascript: URL saved here — e.g. via a
+// shared/imported config file — would run in the admin's session when clicked.
+function isSafeUrl(value) {
+  const v = String(value == null ? "" : value).trim();
+  if (!v) return true;
+  return !/^\s*(javascript|data|vbscript|file):/i.test(v);
+}
+
 export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
@@ -91,6 +101,9 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (!name || !openUrl || !checkUrl) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+    if (!isSafeUrl(openUrl) || !isSafeUrl(checkUrl)) {
+      return res.status(400).json({ error: "unsafe_url" });
+    }
 
     const safeMethod = (method === "ping" || method === "http") ? method : "http";
 
@@ -117,6 +130,12 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (!svc) return res.status(404).json({ error: "Service not found" });
 
     const { name, openUrl, checkUrl, method, notes } = req.body || {};
+    if (openUrl !== undefined && !isSafeUrl(openUrl)) {
+      return res.status(400).json({ error: "unsafe_url" });
+    }
+    if (checkUrl !== undefined && !isSafeUrl(checkUrl)) {
+      return res.status(400).json({ error: "unsafe_url" });
+    }
     if (name      !== undefined) svc.name      = name;
     if (openUrl   !== undefined) svc.openUrl   = openUrl;
     if (checkUrl  !== undefined) svc.checkUrl  = checkUrl;
@@ -167,6 +186,9 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (!title || !url) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+    if (!isSafeUrl(url)) {
+      return res.status(400).json({ error: "unsafe_url" });
+    }
 
     const newLink = {
       id: makeId("link"),
@@ -188,6 +210,9 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     if (!lnk) return res.status(404).json({ error: "Link not found" });
 
     const { title, url, icon, notes } = req.body || {};
+    if (url !== undefined && !isSafeUrl(url)) {
+      return res.status(400).json({ error: "unsafe_url" });
+    }
     if (title !== undefined) lnk.title = title;
     if (url   !== undefined) lnk.url   = url;
     if (icon  !== undefined) lnk.icon  = icon;

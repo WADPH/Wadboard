@@ -15,14 +15,23 @@ export function createAuthModule({ dbApi }) {
   const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
   const VIEW_SESSIONS = {}; // { token: { createdAt, lastSeenAt, ip, userAgent, acceptLanguage } }
   const VIEW_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 days
-  const ACCESS_ATTEMPTS = {}; // { ip: { count: number, lockedUntil: number } }
-  const ACCESS_MAX_ATTEMPTS = 10;
-  const ACCESS_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
   function createSession() {
     const token = crypto.randomBytes(32).toString("hex");
     sessions[token] = { createdAt: Date.now() };
     return token;
+  }
+
+  // Called after a password rotation so a stolen/old admin cookie cannot keep
+  // working past the change. The session that just performed the change is kept.
+  function invalidateOtherSessions(currentToken, { stopTerminal } = {}) {
+    for (const token of Object.keys(sessions)) {
+      if (token === currentToken) continue;
+      delete sessions[token];
+      if (typeof stopTerminal === "function") {
+        stopTerminal(token, "password_changed");
+      }
+    }
   }
 
   function createViewSession(req) {
@@ -75,11 +84,13 @@ export function createAuthModule({ dbApi }) {
     return { token, ...sess };
   }
 
+  // `req.ip` (and `req.secure`) are only trustworthy once Express is told which
+  // hops to trust via `app.set("trust proxy", ...)` (see server.js / TRUST_PROXY
+  // env var). With trust proxy left at its safe default (off), Express ignores
+  // client-supplied `X-Forwarded-For`/`X-Forwarded-Proto` headers entirely, so
+  // callers can no longer spoof their IP to dodge the login lock-out below or to
+  // poison the audit log.
   function getClientIp(req) {
-    const xfwd = req.headers["x-forwarded-for"];
-    if (typeof xfwd === "string" && xfwd.trim()) {
-      return xfwd.split(",")[0].trim();
-    }
     const raw = req.ip || req.socket?.remoteAddress || "unknown";
     return String(raw).replace(/^::ffff:/, "");
   }
@@ -115,56 +126,65 @@ export function createAuthModule({ dbApi }) {
     return "Unknown OS";
   }
 
-  function getAccessAttemptState(req) {
-    const ip = getClientIp(req);
-    if (!ACCESS_ATTEMPTS[ip]) {
-      ACCESS_ATTEMPTS[ip] = { count: 0, lockedUntil: 0 };
+  // -----------------------
+  // Per-IP login throttling, shared by any endpoint that checks a password.
+  // -----------------------
+  function createAttemptLimiter({ maxAttempts, lockMs }) {
+    const state = {}; // { ip: { count, lockedUntil } }
+
+    function getState(req) {
+      const ip = getClientIp(req);
+      if (!state[ip]) state[ip] = { count: 0, lockedUntil: 0 };
+      return state[ip];
     }
-    return ACCESS_ATTEMPTS[ip];
+
+    function getRemainingMs(req) {
+      const s = getState(req);
+      const now = Date.now();
+      if (s.lockedUntil > now) return s.lockedUntil - now;
+      if (s.lockedUntil) s.lockedUntil = 0;
+      return 0;
+    }
+
+    function registerFailure(req) {
+      const s = getState(req);
+      const now = Date.now();
+      if (s.lockedUntil > now) return;
+      s.count += 1;
+      if (s.count >= maxAttempts) {
+        s.count = 0;
+        s.lockedUntil = now + lockMs;
+      }
+    }
+
+    function clearFailures(req) {
+      const s = getState(req);
+      s.count = 0;
+      s.lockedUntil = 0;
+    }
+
+    return { getRemainingMs, registerFailure, clearFailures };
   }
 
-  function getAccessLockRemainingMs(req) {
-    const state = getAccessAttemptState(req);
-    const now = Date.now();
-    if (state.lockedUntil > now) {
-      return state.lockedUntil - now;
-    }
-    if (state.lockedUntil) {
-      state.lockedUntil = 0;
-    }
-    return 0;
-  }
+  // Private-mode ("view") access password.
+  const accessLoginLimiter = createAttemptLimiter({ maxAttempts: 10, lockMs: 5 * 60 * 1000 });
+  // Admin password — guards full RCE (terminal/host actions), so it gets a
+  // stricter limiter than the plain viewer gate.
+  const adminLoginLimiter = createAttemptLimiter({ maxAttempts: 5, lockMs: 15 * 60 * 1000 });
 
-  function registerAccessFailure(req) {
-    const state = getAccessAttemptState(req);
-    const now = Date.now();
-    if (state.lockedUntil > now) return;
-    state.count += 1;
-    if (state.count >= ACCESS_MAX_ATTEMPTS) {
-      state.count = 0;
-      state.lockedUntil = now + ACCESS_LOCK_MS;
-    }
-  }
-
-  function clearAccessFailures(req) {
-    const state = getAccessAttemptState(req);
-    state.count = 0;
-    state.lockedUntil = 0;
-  }
-
-  function setViewAccessCookie(res, token) {
+  function setViewAccessCookie(req, res, token) {
     res.cookie("viewToken", token, {
       httpOnly: true,
       sameSite: "strict",
       maxAge: VIEW_SESSION_TTL_MS,
-      secure: false
+      secure: !!req.secure
     });
   }
 
-  function clearViewAccessCookie(res) {
+  function clearViewAccessCookie(req, res) {
     res.clearCookie("viewToken", {
       sameSite: "strict",
-      secure: false
+      secure: !!req.secure
     });
   }
 
@@ -204,7 +224,7 @@ export function createAuthModule({ dbApi }) {
     });
 
     app.post("/api/access/login", (req, res) => {
-      const waitMs = getAccessLockRemainingMs(req);
+      const waitMs = accessLoginLimiter.getRemainingMs(req);
       if (waitMs > 0) {
         return res.status(429).json({
           error: "too_many_attempts",
@@ -214,8 +234,8 @@ export function createAuthModule({ dbApi }) {
 
       const { password } = req.body || {};
       if (!password || !checkPassword(password)) {
-        registerAccessFailure(req);
-        const nowWaitMs = getAccessLockRemainingMs(req);
+        accessLoginLimiter.registerFailure(req);
+        const nowWaitMs = accessLoginLimiter.getRemainingMs(req);
         if (nowWaitMs > 0) {
           return res.status(429).json({
             error: "too_many_attempts",
@@ -225,9 +245,9 @@ export function createAuthModule({ dbApi }) {
         return res.status(401).json({ error: "bad_password" });
       }
 
-      clearAccessFailures(req);
+      accessLoginLimiter.clearFailures(req);
       const token = createViewSession(req);
-      setViewAccessCookie(res, token);
+      setViewAccessCookie(req, res, token);
       audit("access.login", "Private-mode access granted", getRequestSource(req, { viewToken: token }));
       return res.json({ ok: true });
     });
@@ -237,7 +257,7 @@ export function createAuthModule({ dbApi }) {
       if (token) {
         delete VIEW_SESSIONS[token];
       }
-      clearViewAccessCookie(res);
+      clearViewAccessCookie(req, res);
       audit("access.logout", "Private-mode session logged out", getRequestSource(req));
       return res.json({ ok: true });
     });
@@ -250,11 +270,11 @@ export function createAuthModule({ dbApi }) {
 
       if (privateMode) {
         const token = createViewSession(req);
-        setViewAccessCookie(res, token);
+        setViewAccessCookie(req, res, token);
       } else {
         const token = req.cookies.viewToken;
         if (token) delete VIEW_SESSIONS[token];
-        clearViewAccessCookie(res);
+        clearViewAccessCookie(req, res);
       }
 
       audit("access.mode", `Private mode ${privateMode ? "enabled" : "disabled"}`, getRequestSource(req), { privateMode });
@@ -296,7 +316,7 @@ export function createAuthModule({ dbApi }) {
 
       delete VIEW_SESSIONS[token];
       if (token === currentToken) {
-        clearViewAccessCookie(res);
+        clearViewAccessCookie(req, res);
         return res.json({ ok: true, revokedCurrent: true });
       }
       return res.json({ ok: true, revokedCurrent: false });
@@ -317,21 +337,38 @@ export function createAuthModule({ dbApi }) {
     // Auth endpoints
     // -----------------------
     app.post("/api/login", (req, res) => {
-      const { password } = req.body || {};
-    // first-time setup
-    if (!db.admin.initialized) {
-      if (!password || password.length < 6) {
-        return res.status(400).json({ error: "password_too_short" });
+      const waitMs = adminLoginLimiter.getRemainingMs(req);
+      if (waitMs > 0) {
+        return res.status(429).json({
+          error: "too_many_attempts",
+          retryAfterSec: Math.ceil(waitMs / 1000)
+        });
       }
 
-      db.admin.passwordHash = hashPassword(password);
-      db.admin.initialized = true;
-      saveDB();
-    } else {
-      if (!checkPassword(password)) {
-        return res.status(401).json({ error: "bad_password" });
+      const { password } = req.body || {};
+      // first-time setup
+      if (!db.admin.initialized) {
+        if (!password || password.length < 6) {
+          return res.status(400).json({ error: "password_too_short" });
+        }
+
+        db.admin.passwordHash = hashPassword(password);
+        db.admin.initialized = true;
+        saveDB();
+      } else {
+        if (!checkPassword(password)) {
+          adminLoginLimiter.registerFailure(req);
+          const nowWaitMs = adminLoginLimiter.getRemainingMs(req);
+          if (nowWaitMs > 0) {
+            return res.status(429).json({
+              error: "too_many_attempts",
+              retryAfterSec: Math.ceil(nowWaitMs / 1000)
+            });
+          }
+          return res.status(401).json({ error: "bad_password" });
+        }
+        adminLoginLimiter.clearFailures(req);
       }
-    }
 
 
 
@@ -341,12 +378,12 @@ export function createAuthModule({ dbApi }) {
         httpOnly: true,
         sameSite: "strict",
         maxAge: SESSION_TTL_MS,
-        secure: false
+        secure: !!req.secure
       });
 
       if (isPrivateModeEnabled()) {
         const viewToken = createViewSession(req);
-        setViewAccessCookie(res, viewToken);
+        setViewAccessCookie(req, res, viewToken);
       }
 
       audit("admin.login", db.admin.initialized ? "Admin session created" : "Admin password initialized", getRequestSource(req, { adminToken: token }));
@@ -368,7 +405,8 @@ export function createAuthModule({ dbApi }) {
 
       db.admin.passwordHash = hashPassword(newPassword);
       saveDB();
-      audit("admin.password.change", "Admin password updated", getRequestSource(req));
+      invalidateOtherSessions(req.sessionToken, { stopTerminal: stopTerminalSessionByToken });
+      audit("admin.password.change", "Admin password updated; other sessions revoked", getRequestSource(req));
 
       res.json({ ok: true });
     });
@@ -391,7 +429,7 @@ export function createAuthModule({ dbApi }) {
 
       res.clearCookie("adminToken", {
         sameSite: "strict",
-        secure: false
+        secure: !!req.secure
       });
 
       audit("admin.logout", "Admin session logged out", getRequestSource(req));

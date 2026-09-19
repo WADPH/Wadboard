@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { exec } from "child_process";
 import { audit, error as logError } from "./logger.js";
+import { isAndroidLike, execCmd } from "./platform.js";
 
 export function createActionsModule({ dbApi }) {
   const db = dbApi.getDB();

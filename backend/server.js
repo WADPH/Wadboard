@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import express from "express";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { WebSocketServer } from "ws";
 import * as dbApi from "./src/db.js";
@@ -26,6 +27,39 @@ const healthApi = createHealthModule({ dbApi });
 const terminalApi = createTerminalModule({ authApi });
 
 const app = express();
+
+// Off by default: without a reverse proxy in front of Wadboard, trusting
+// X-Forwarded-For/X-Forwarded-Proto would let any client spoof its IP (bypassing
+// login lock-outs and poisoning the audit log) or fake an HTTPS connection
+// (making cookies think they're safe to send unencrypted). Set TRUST_PROXY=1
+// only when Wadboard sits behind a reverse proxy/tunnel that sets those headers.
+const TRUST_PROXY = process.env.TRUST_PROXY;
+if (TRUST_PROXY) {
+  app.set("trust proxy", TRUST_PROXY === "1" ? 1 : TRUST_PROXY);
+}
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://unpkg.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+      imgSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "https://unpkg.com"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"]
+    }
+  },
+  // The xterm assets are pulled from unpkg.com without CORP/CORS headers of
+  // their own; the stricter cross-origin isolation headers would block them.
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
+  frameguard: { action: "deny" }
+}));
 app.use(express.json());
 app.use(cookieParser());
 

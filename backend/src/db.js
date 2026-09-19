@@ -7,6 +7,148 @@ import { error as logError } from "./logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_FILE = path.join(__dirname, "..", "wadph-data.json");
+const KEY_FILE = path.join(__dirname, "..", ".secret.key");
+
+// -----------------------
+// Password hashing (salted scrypt, with transparent migration
+// from the old unsalted SHA-256 scheme)
+// -----------------------
+const SCRYPT_KEYLEN = 64;
+const SCRYPT_SALT_BYTES = 16;
+
+function legacySha256(password) {
+  return crypto.createHash("sha256").update(String(password)).digest("hex");
+}
+
+function timingSafeEqualHex(a, b) {
+  try {
+    const bufA = Buffer.from(String(a), "hex");
+    const bufB = Buffer.from(String(b), "hex");
+    if (bufA.length === 0 || bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+// A random, per-password "salt" is mixed in before hashing and stored next to the
+// hash. It guarantees two identical passwords never produce the same hash, which
+// defeats precomputed rainbow-table lookups and forces an attacker to brute-force
+// each stolen hash individually. scrypt is also deliberately slow/memory-hard
+// (unlike a single fast SHA-256 pass), which raises the cost of every guess.
+function hashPassword(password) {
+  const salt = crypto.randomBytes(SCRYPT_SALT_BYTES);
+  const hash = crypto.scryptSync(String(password), salt, SCRYPT_KEYLEN);
+  return `scrypt$${salt.toString("hex")}$${hash.toString("hex")}`;
+}
+
+function checkPassword(password) {
+  if (!db.admin.initialized || !db.admin.passwordHash) return false;
+  const stored = String(db.admin.passwordHash);
+
+  if (stored.startsWith("scrypt$")) {
+    const [, saltHex, hashHex] = stored.split("$");
+    if (!saltHex || !hashHex) return false;
+    let candidateHex;
+    try {
+      const salt = Buffer.from(saltHex, "hex");
+      candidateHex = crypto.scryptSync(String(password), salt, hashHex.length / 2).toString("hex");
+    } catch {
+      return false;
+    }
+    return timingSafeEqualHex(candidateHex, hashHex);
+  }
+
+  // Legacy unsalted SHA-256 hash from older Wadboard versions. Verify with a
+  // constant-time comparison, then transparently upgrade to the salted scheme.
+  const matches = timingSafeEqualHex(legacySha256(password), stored);
+  if (matches) {
+    db.admin.passwordHash = hashPassword(password);
+    saveDB();
+  }
+  return matches;
+}
+
+// -----------------------
+// Encryption at rest for sensitive credential fields
+// -----------------------
+function loadOrCreateEncryptionKey() {
+  if (process.env.WADBOARD_SECRET_KEY) {
+    return crypto.createHash("sha256").update(process.env.WADBOARD_SECRET_KEY).digest();
+  }
+  try {
+    if (fs.existsSync(KEY_FILE)) {
+      const hex = fs.readFileSync(KEY_FILE, "utf8").trim();
+      if (hex.length === 64) return Buffer.from(hex, "hex");
+    }
+  } catch (err) {
+    logError("Failed to read secret key file, generating a new one.", err);
+  }
+  const key = crypto.randomBytes(32);
+  try {
+    fs.writeFileSync(KEY_FILE, key.toString("hex"), { encoding: "utf8", mode: 0o600 });
+  } catch (err) {
+    logError("Failed to persist secret key file.", err);
+  }
+  return key;
+}
+
+const ENCRYPTION_KEY = loadOrCreateEncryptionKey();
+
+function encryptSecret(plain) {
+  const value = String(plain == null ? "" : plain);
+  if (!value) return "";
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+  const enc = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc$${iv.toString("hex")}$${tag.toString("hex")}$${enc.toString("hex")}`;
+}
+
+function decryptSecret(value) {
+  const s = String(value == null ? "" : value);
+  if (!s.startsWith("enc$")) return s; // plaintext (legacy file or never-encrypted default)
+  const parts = s.split("$");
+  if (parts.length !== 4) return "";
+  const [, ivHex, tagHex, dataHex] = parts;
+  try {
+    const iv = Buffer.from(ivHex, "hex");
+    const tag = Buffer.from(tagHex, "hex");
+    const data = Buffer.from(dataHex, "hex");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+  } catch (err) {
+    logError("Failed to decrypt stored secret; dropping value.", err);
+    return "";
+  }
+}
+
+// Applies `transform` (encryptSecret or decryptSecret) to every credential-like
+// field before the dataset touches disk, so `wadph-data.json` never holds
+// SSH/router/bot credentials in plaintext.
+function transformSensitiveFields(dbObj, transform) {
+  const cloned = JSON.parse(JSON.stringify(dbObj));
+
+  if (Array.isArray(cloned.wol)) {
+    cloned.wol.forEach(task => {
+      if (task.pass) task.pass = transform(task.pass);
+      if (task.secureon) task.secureon = transform(task.secureon);
+      if (task.espToken) task.espToken = transform(task.espToken);
+      if (Array.isArray(task.sshActions)) {
+        task.sshActions.forEach(a => {
+          if (a.pass) a.pass = transform(a.pass);
+        });
+      }
+    });
+  }
+
+  if (cloned.config && cloned.config.batteryAlerts && cloned.config.batteryAlerts.telegramBotToken) {
+    cloned.config.batteryAlerts.telegramBotToken = transform(cloned.config.batteryAlerts.telegramBotToken);
+  }
+
+  return cloned;
+}
 
 // -----------------------
 // In-memory DB
@@ -31,34 +173,35 @@ function sanitizeBrandText(value) {
     .slice(0, 40);
 }
 
-let db = {
-  services: [],
-  links: [],
-  wol: [],
-  hostActions: [],
-  config: {
-    batteryAlerts: defaultBatteryAlertsConfig(),
-    brandText: "",
-    privateMode: false
-  },
-  admin: {
-    passwordHash: null, // <-- ВАЖНО
-    initialized: false
-  }
-};
-
-function hashPassword(password) {
-  return crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
+function buildEmptyDb() {
+  return {
+    services: [],
+    links: [],
+    wol: [],
+    hostActions: [],
+    config: {
+      batteryAlerts: defaultBatteryAlertsConfig(),
+      brandText: "",
+      privateMode: false
+    },
+    admin: {
+      passwordHash: null,
+      initialized: false
+    }
+  };
 }
 
-function checkPassword(password) {
-  if (!db.admin.initialized || !db.admin.passwordHash) return false;
-  return hashPassword(password) === db.admin.passwordHash;
-}
+// `db` keeps a single stable object identity for the lifetime of the process.
+// Other modules capture `dbApi.getDB()` once at startup (`const db = dbApi.getDB()`);
+// if this binding were ever reassigned (as it used to be on config import), those
+// cached references would silently start reading/writing a stale, detached copy.
+// `replaceDbContents` below mutates the existing object instead of replacing it.
+let db = buildEmptyDb();
 
+function replaceDbContents(nextData) {
+  for (const key of Object.keys(db)) delete db[key];
+  Object.assign(db, nextData);
+}
 
 function makeId(prefix) {
   return prefix + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
@@ -103,24 +246,6 @@ function getBrandTextConfig() {
   ensureConfigStructure();
   const custom = sanitizeBrandText(db.config.brandText || "");
   return { custom, text: custom || "WELCOME" };
-}
-
-function buildEmptyDb() {
-  return {
-    services: [],
-    links: [],
-    wol: [],
-    hostActions: [],
-    config: {
-      batteryAlerts: defaultBatteryAlertsConfig(),
-      brandText: "",
-      privateMode: false
-    },
-    admin: {
-      passwordHash: null,
-      initialized: false
-    }
-  };
 }
 
 function ensureNormalizedDb(input) {
@@ -182,30 +307,34 @@ function ensureNormalizedDb(input) {
     if (a.lastResult === undefined) a.lastResult = "never";
   });
 
-  db = nextDb;
+  if (nextDb !== db) {
+    replaceDbContents(nextDb);
+  }
   ensureConfigStructure();
   return db;
 }
 
 function replaceDB(nextDb) {
-  db = ensureNormalizedDb(nextDb);
-  return db;
+  return ensureNormalizedDb(nextDb);
 }
 
 function loadDB() {
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    replaceDB(parsed);
+    const decrypted = transformSensitiveFields(parsed, decryptSecret);
+    replaceDB(decrypted);
   } catch (err) {
     logError("Failed to load DB file. Using empty DB.", err);
-    db = buildEmptyDb();
+    replaceDbContents(buildEmptyDb());
+    ensureConfigStructure();
   }
 }
 
 function saveDB() {
   ensureConfigStructure();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf8");
+  const encrypted = transformSensitiveFields(db, encryptSecret);
+  fs.writeFileSync(DATA_FILE, JSON.stringify(encrypted, null, 2), "utf8");
 }
 
 // -----------------------

@@ -81,10 +81,10 @@ function truncate(value, max = 120) {
 }
 
 function getRequestSource(req, extras = {}) {
-  const xfwd = req?.headers?.["x-forwarded-for"];
-  const ip = typeof xfwd === "string" && xfwd.trim()
-    ? xfwd.split(",")[0].trim()
-    : String(req?.ip || req?.socket?.remoteAddress || "unknown").replace(/^::ffff:/, "");
+  // `req.ip` only reflects X-Forwarded-For when Express's `trust proxy` setting
+  // is explicitly enabled (see server.js). With it left off by default, a client
+  // can no longer spoof the IP recorded here by sending a fake header.
+  const ip = String(req?.ip || req?.socket?.remoteAddress || "unknown").replace(/^::ffff:/, "");
   const adminToken = req?.cookies?.adminToken || extras.adminToken || "";
   const viewToken = req?.cookies?.viewToken || extras.viewToken || "";
   const session = adminToken

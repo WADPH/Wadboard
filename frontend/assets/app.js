@@ -4,6 +4,16 @@
   const API_BASE = "/api";
   const THEME_KEY = "wadphTheme";
 
+  // Blocks javascript:/data:/vbscript: URLs from ever landing in an <a href>.
+  // Service/link URLs come from stored (admin-entered or imported) config, and
+  // rendering one of those schemes directly would execute arbitrary script in
+  // the page — the server rejects them on save too, this is defense in depth.
+  function isSafeExternalUrl(value) {
+    const v = String(value || "").trim();
+    if (!v) return false;
+    return !/^\s*(javascript|data|vbscript|file):/i.test(v);
+  }
+
   let editMode = false;
   let state = { services: [], links: [], wol: [], hostActions: [] };
   let privateAccessMode = false;
@@ -187,7 +197,7 @@
       const valueEl = linkEl.querySelector(".footer-version-value");
       if (valueEl) valueEl.textContent = info.version;
 
-      if (info.link) {
+      if (info.link && isSafeExternalUrl(info.link)) {
         linkEl.href = info.link;
         linkEl.setAttribute("aria-label", `Project version ${info.version}`);
       } else {
@@ -2378,7 +2388,7 @@ if (brandSaveBtn) {
 
     const openBtn = document.createElement("a");
     openBtn.className = "btn";
-    openBtn.href = s.openUrl;
+    openBtn.href = isSafeExternalUrl(s.openUrl) ? s.openUrl : "#";
     openBtn.target = "_blank";
     openBtn.rel = "noopener";
     setLinkContentWithOptionalIcon(openBtn, "external-link", `Open ${s.name}`);
@@ -2463,7 +2473,7 @@ if (brandSaveBtn) {
 
     const openBtn = document.createElement("a");
     openBtn.className = "btn";
-    openBtn.href = l.url;
+    openBtn.href = isSafeExternalUrl(l.url) ? l.url : "#";
     openBtn.target = "_blank";
     openBtn.rel = "noopener";
     setLinkContentWithOptionalIcon(openBtn, "link", `Open ${l.title}`);
