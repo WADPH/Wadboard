@@ -6,10 +6,11 @@ import { exec } from "child_process";
 import { error as logError, warn as logWarn } from "./logger.js";
 import { isAndroidLike, execCmd } from "./platform.js";
 
-export function createHealthModule({ dbApi }) {
+export function createHealthModule({ dbApi, cameraApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const getBatteryAlertsConfig = dbApi.getBatteryAlertsConfig;
+  const probeCameraStatus = cameraApi?.probeCameraStatus || (async () => {});
 
   // -----------------------
   // Health check helpers
@@ -103,6 +104,9 @@ export function createHealthModule({ dbApi }) {
       }
       for (const task of db.wol) {
         await probeWol(task);
+      }
+      for (const cam of (db.cameras || [])) {
+        await probeCameraStatus(cam);
       }
       saveDB();
     } catch (err) {

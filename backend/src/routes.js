@@ -11,7 +11,9 @@ function isSafeUrl(value) {
   return !/^\s*(javascript|data|vbscript|file):/i.test(v);
 }
 
-export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }) {
+const CAMERA_PROVIDERS = new Set(["ip_cam"]);
+
+export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const makeId = dbApi.makeId;
@@ -535,5 +537,161 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi }
     res.json(result);
   });
 
+  // -----------------------
+  // CAMERAS CRUD / view proxy / control
+  // -----------------------
+  function findCamera(id) {
+    return db.cameras.find(c => c.id === id);
+  }
+
+  app.post("/api/camera", requireAdmin, (req, res) => {
+    const { name, provider, host, port, username, password, notes, icon } = req.body || {};
+    const trimmedHost = String(host || "").trim();
+    const trimmedPort = String(port || "").trim();
+
+    if (!name || !trimmedHost || !trimmedPort) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    if (/\s/.test(trimmedHost) || !/^\d+$/.test(trimmedPort) || Number(trimmedPort) < 1 || Number(trimmedPort) > 65535) {
+      return res.status(400).json({ error: "invalid_host_or_port" });
+    }
+
+    const newCamera = {
+      id: makeId("cam"),
+      name,
+      provider: CAMERA_PROVIDERS.has(provider) ? provider : "ip_cam",
+      host: trimmedHost,
+      port: trimmedPort,
+      username: (username || "").trim(),
+      password: password || "",
+      notes: notes || "",
+      icon: icon || "",
+      rotation: 0,
+      lastStatus: "unknown",
+      lastChecked: null,
+      lastRun: null,
+      lastResult: "never"
+    };
+
+    db.cameras.push(newCamera);
+    saveDB();
+    audit("camera.create", `Camera created: ${newCamera.name}`, getRequestSource(req), { id: newCamera.id });
+    res.json(newCamera);
+  });
+
+  app.put("/api/camera/:id", requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const cam = findCamera(id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+
+    const { name, provider, host, port, username, password, notes, icon } = req.body || {};
+
+    if (host !== undefined || port !== undefined) {
+      const nextHost = String(host !== undefined ? host : cam.host).trim();
+      const nextPort = String(port !== undefined ? port : cam.port).trim();
+      if (!nextHost || !nextPort || /\s/.test(nextHost) || !/^\d+$/.test(nextPort) || Number(nextPort) < 1 || Number(nextPort) > 65535) {
+        return res.status(400).json({ error: "invalid_host_or_port" });
+      }
+      cam.host = nextHost;
+      cam.port = nextPort;
+    }
+
+    if (name     !== undefined) cam.name     = name;
+    if (provider !== undefined && CAMERA_PROVIDERS.has(provider)) cam.provider = provider;
+    if (username !== undefined) cam.username = String(username).trim();
+    if (password !== undefined) cam.password = password;
+    if (notes    !== undefined) cam.notes    = notes;
+    if (icon     !== undefined) cam.icon     = icon;
+
+    saveDB();
+    audit("camera.update", `Camera updated: ${cam.name || id}`, getRequestSource(req), { id });
+    res.json(cam);
+  });
+
+  app.delete("/api/camera/:id", requireAdmin, (req, res) => {
+    const { id } = req.params;
+    db.cameras = db.cameras.filter(c => c.id !== id);
+    saveDB();
+    audit("camera.delete", `Camera deleted: ${id}`, getRequestSource(req), { id });
+    res.json({ ok: true });
+  });
+
+  app.put("/api/reorder/cameras", requireAdmin, (req, res) => {
+    const { order } = req.body || {};
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ error: "order must be array" });
+    }
+
+    const map = new Map(db.cameras.map(c => [c.id, c]));
+    const newList = [];
+    for (const cid of order) {
+      if (map.has(cid)) {
+        newList.push(map.get(cid));
+        map.delete(cid);
+      }
+    }
+    for (const [, cam] of map) newList.push(cam);
+
+    db.cameras = newList;
+    saveDB();
+    res.json({ ok: true });
+  });
+
+  // Read-only: available to any viewer with dashboard access, same level as /api/state.
+  app.get("/api/camera/:id/snapshot", requireViewAccess, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    await cameraApi.proxySnapshot(cam, res);
+  });
+
+  app.get("/api/camera/:id/stream", requireViewAccess, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    await cameraApi.proxyStream(cam, req, res);
+  });
+
+  app.get("/api/camera/:id/status", requireViewAccess, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const result = await cameraApi.getStatus(cam);
+    res.json(result);
+  });
+
+  app.get("/api/camera/:id/connections", requireViewAccess, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const result = await cameraApi.getConnections(cam);
+    res.json(result);
+  });
+
+  // Mutating controls: gated behind admin, same trust level as WOL run / host actions.
+  app.post("/api/camera/:id/switch", requireAdmin, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const result = await cameraApi.runSwitch(cam, { source: getRequestSource(req) });
+    res.json(result);
+  });
+
+  app.post("/api/camera/:id/flashlight", requireAdmin, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const action = ["on", "off", "toggle"].includes(req.body?.action) ? req.body.action : "toggle";
+    const result = await cameraApi.runFlashlight(cam, action, { source: getRequestSource(req) });
+    res.json(result);
+  });
+
+  app.post("/api/camera/:id/rotation", requireAdmin, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const result = await cameraApi.runRotation(cam, req.body?.value, { source: getRequestSource(req) });
+    res.json(result);
+  });
+
+  app.post("/api/camera/:id/restart", requireAdmin, async (req, res) => {
+    const cam = findCamera(req.params.id);
+    if (!cam) return res.status(404).json({ error: "Camera not found" });
+    const result = await cameraApi.runRestart(cam, { source: getRequestSource(req) });
+    res.json(result);
+  });
 
 }

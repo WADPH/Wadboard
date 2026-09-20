@@ -169,6 +169,14 @@
       <div class="grid" id="wol-grid"></div>
     </section>
 
+    <section class="section">
+      <div class="section-head">
+        <h2>Cameras</h2>
+        <div class="section-count" id="cam-count">0 total</div>
+      </div>
+      <div class="grid" id="cam-grid"></div>
+    </section>
+
   </div>
 
   <footer class="footer">
@@ -333,6 +341,7 @@
         <button class="tab" id="tab-link">Link</button>
         <button class="tab" id="tab-wol">WOL</button>
         <button class="tab" id="tab-host">Device Cmd</button>
+        <button class="tab" id="tab-camera">Camera</button>
       </div>
       <button class="close" id="modal-close">Close</button>
     </div>
@@ -534,6 +543,50 @@
       </div>
 
       <button class="btn submit" type="submit" id="host-submit">Create Command</button>
+    </form>
+
+    <!-- CAMERA FORM -->
+    <form class="form hidden" id="form-camera">
+      <h3 id="cam-form-title">Add Camera</h3>
+
+      <div class="field">
+        <label class="label">Camera Name</label>
+        <input class="input" id="cam-name" placeholder="Front door" required />
+      </div>
+
+      <div class="field">
+        <label class="label">Provider</label>
+        <select class="input" id="cam-provider">
+          <option value="ip_cam">tobi01001/IP_Cam</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label">Host / IP or domain</label>
+        <input class="input" id="cam-host" placeholder="192.168.1.60" required />
+      </div>
+
+      <div class="field">
+        <label class="label">Port</label>
+        <input class="input" id="cam-port" placeholder="8080" required />
+      </div>
+
+      <div class="field">
+        <label class="label">Username (optional)</label>
+        <input class="input" id="cam-username" placeholder="" autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <label class="label">Password (optional)</label>
+        <input class="input" id="cam-password" type="password" placeholder="Leave blank for none" autocomplete="new-password" />
+      </div>
+
+      <div class="field">
+        <label class="label">Notes</label>
+        <textarea class="textarea" id="cam-notes" placeholder="Short notes"></textarea>
+      </div>
+
+      <button class="btn submit" type="submit" id="cam-submit">Create Camera</button>
     </form>
   </div>
 </div>

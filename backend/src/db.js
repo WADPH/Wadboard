@@ -147,6 +147,12 @@ function transformSensitiveFields(dbObj, transform) {
     cloned.config.batteryAlerts.telegramBotToken = transform(cloned.config.batteryAlerts.telegramBotToken);
   }
 
+  if (Array.isArray(cloned.cameras)) {
+    cloned.cameras.forEach(cam => {
+      if (cam.password) cam.password = transform(cam.password);
+    });
+  }
+
   return cloned;
 }
 
@@ -179,6 +185,7 @@ function buildEmptyDb() {
     links: [],
     wol: [],
     hostActions: [],
+    cameras: [],
     config: {
       batteryAlerts: defaultBatteryAlertsConfig(),
       brandText: "",
@@ -307,6 +314,23 @@ function ensureNormalizedDb(input) {
     if (a.lastResult === undefined) a.lastResult = "never";
   });
 
+  nextDb.cameras = Array.isArray(nextDb.cameras) ? nextDb.cameras : [];
+  nextDb.cameras.forEach(cam => {
+    if (!cam.id) cam.id = makeId("cam");
+    if (!cam.provider) cam.provider = "ip_cam";
+    if (cam.notes === undefined) cam.notes = "";
+    if (cam.icon === undefined) cam.icon = "";
+    if (cam.host === undefined) cam.host = "";
+    if (cam.port === undefined) cam.port = "";
+    if (cam.username === undefined) cam.username = "";
+    if (cam.password === undefined) cam.password = "";
+    if (cam.rotation === undefined) cam.rotation = 0;
+    if (cam.lastStatus === undefined) cam.lastStatus = "unknown";
+    if (cam.lastChecked === undefined) cam.lastChecked = null;
+    if (cam.lastRun === undefined) cam.lastRun = null;
+    if (cam.lastResult === undefined) cam.lastResult = "never";
+  });
+
   if (nextDb !== db) {
     replaceDbContents(nextDb);
   }
@@ -377,6 +401,23 @@ function sanitizeForClient(isAdmin) {
           notes: a.notes || "",
           lastRun: a.lastRun || null,
           lastResult: a.lastResult || "never"
+        }))
+      : [],
+    // host/port/username/password are never sent to non-admin viewers — the
+    // frontend only ever talks to cameras through /api/camera/:id/* proxy
+    // routes, so it has no legitimate use for the raw connection details.
+    cameras: Array.isArray(db.cameras)
+      ? db.cameras.map(cam => ({
+          id: cam.id,
+          name: cam.name,
+          icon: cam.icon || "",
+          notes: cam.notes || "",
+          provider: cam.provider || "ip_cam",
+          rotation: cam.rotation || 0,
+          lastStatus: cam.lastStatus || "unknown",
+          lastChecked: cam.lastChecked || null,
+          lastRun: cam.lastRun || null,
+          lastResult: cam.lastResult || "never"
         }))
       : []
   };

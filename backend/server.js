@@ -9,6 +9,7 @@ import * as dbApi from "./src/db.js";
 import { createAuthModule } from "./src/auth.js";
 import { createHealthModule } from "./src/health.js";
 import { createActionsModule } from "./src/actions.js";
+import { createCameraModule } from "./src/camera.js";
 import { createTerminalModule } from "./src/terminal.js";
 import { registerAppRoutes } from "./src/routes.js";
 import * as logger from "./src/logger.js";
@@ -23,7 +24,8 @@ dbApi.loadDB();
 
 const authApi = createAuthModule({ dbApi });
 const actionsApi = createActionsModule({ dbApi });
-const healthApi = createHealthModule({ dbApi });
+const cameraApi = createCameraModule({ dbApi });
+const healthApi = createHealthModule({ dbApi, cameraApi });
 const terminalApi = createTerminalModule({ authApi });
 
 const app = express();
@@ -73,7 +75,7 @@ if (fs.existsSync(FRONTEND_INDEX)) {
 authApi.registerRoutes(app, { terminalApi });
 healthApi.registerRoutes(app, { authApi });
 terminalApi.registerRoutes(app);
-registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi });
+registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi });
 
 healthApi.startMonitoring();
 

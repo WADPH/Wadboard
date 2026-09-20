@@ -15,7 +15,11 @@
   }
 
   let editMode = false;
-  let state = { services: [], links: [], wol: [], hostActions: [] };
+  let state = { services: [], links: [], wol: [], hostActions: [], cameras: [] };
+  // Camera ids currently showing the live MJPEG stream instead of a snapshot.
+  // Kept outside `state` so it survives the periodic re-render triggered by
+  // the 10s auto-refresh loop.
+  const cameraLiveIds = new Set();
   let privateAccessMode = false;
   let viewAccessGranted = true;
   let appStarted = false;
@@ -39,11 +43,13 @@
   const tabLnkBtn  = document.getElementById("tab-link");
   const tabWolBtn  = document.getElementById("tab-wol");
   const tabHostBtn = document.getElementById("tab-host");
+  const tabCamBtn  = document.getElementById("tab-camera");
 
   const formSvc  = document.getElementById("form-service");
   const formLnk  = document.getElementById("form-link");
   const formWol  = document.getElementById("form-wol");
   const formHost = document.getElementById("form-host");
+  const formCam  = document.getElementById("form-camera");
 
   const svcTitleEl   = document.getElementById("svc-form-title");
   const svcSubmitEl  = document.getElementById("svc-submit");
@@ -53,14 +59,26 @@
   const wolSubmitEl  = document.getElementById("wol-submit");
   const hostTitleEl  = document.getElementById("host-form-title");
   const hostSubmitEl = document.getElementById("host-submit");
+  const camTitleEl   = document.getElementById("cam-form-title");
+  const camSubmitEl  = document.getElementById("cam-submit");
+
+  const camNameInput     = document.getElementById("cam-name");
+  const camProviderEl    = document.getElementById("cam-provider");
+  const camHostInput     = document.getElementById("cam-host");
+  const camPortInput     = document.getElementById("cam-port");
+  const camUsernameInput = document.getElementById("cam-username");
+  const camPasswordInput = document.getElementById("cam-password");
+  const camNotesInput    = document.getElementById("cam-notes");
 
   const svcGrid = document.getElementById("svc-grid");
   const lnkGrid = document.getElementById("lnk-grid");
   const wolGrid = document.getElementById("wol-grid");
+  const camGrid = document.getElementById("cam-grid");
 
   const svcCount = document.getElementById("svc-count");
   const lnkCount = document.getElementById("lnk-count");
   const wolCount = document.getElementById("wol-count");
+  const camCount = document.getElementById("cam-count");
 
   const adminToggleBtn = document.getElementById("admin-toggle");
   const adminToggleHealthBtn = document.getElementById("admin-toggle-health");
@@ -1605,7 +1623,8 @@ batterySaveBtn.addEventListener("click", async () => {
       services: data.services || [],
       links: data.links || [],
       wol: data.wol || [],
-      hostActions: data.hostActions || []
+      hostActions: data.hostActions || [],
+      cameras: data.cameras || []
     };
     render();
   }
@@ -1623,6 +1642,11 @@ batterySaveBtn.addEventListener("click", async () => {
   async function persistOrderWOL() {
     const order = state.wol.map(w => w.id);
     await apiJSON("PUT", "/reorder/wol", { order });
+  }
+
+  async function persistOrderCameras() {
+    const order = state.cameras.map(c => c.id);
+    await apiJSON("PUT", "/reorder/cameras", { order });
   }
 
   // ==============================
@@ -1703,6 +1727,16 @@ batterySaveBtn.addEventListener("click", async () => {
     hostNotesInput.value   = "";
   }
 
+  function resetCameraForm() {
+    camNameInput.value     = "";
+    camProviderEl.value    = "ip_cam";
+    camHostInput.value     = "";
+    camPortInput.value     = "";
+    camUsernameInput.value = "";
+    camPasswordInput.value = "";
+    camNotesInput.value    = "";
+  }
+
   function updateFormTitles() {
     if (mode.type === "service") {
       if (mode.action === "create") {
@@ -1728,13 +1762,21 @@ batterySaveBtn.addEventListener("click", async () => {
         wolTitleEl.textContent  = "Edit WOL";
         wolSubmitEl.textContent = "Save Changes";
       }
-    } else {
+    } else if (mode.type === "host") {
       if (mode.action === "create") {
         hostTitleEl.textContent  = "Add Device Command";
         hostSubmitEl.textContent = "Create Command";
       } else {
         hostTitleEl.textContent  = "Edit Device Command";
         hostSubmitEl.textContent = "Save Changes";
+      }
+    } else if (mode.type === "camera") {
+      if (mode.action === "create") {
+        camTitleEl.textContent  = "Add Camera";
+        camSubmitEl.textContent = "Create Camera";
+      } else {
+        camTitleEl.textContent  = "Edit Camera";
+        camSubmitEl.textContent = "Save Changes";
       }
     }
   }
@@ -1744,11 +1786,13 @@ batterySaveBtn.addEventListener("click", async () => {
     formLnk.classList.add("hidden");
     formWol.classList.add("hidden");
     formHost.classList.add("hidden");
+    formCam.classList.add("hidden");
 
     if (which === "service") formSvc.classList.remove("hidden");
     if (which === "link")    formLnk.classList.remove("hidden");
     if (which === "wol")     formWol.classList.remove("hidden");
     if (which === "host")    formHost.classList.remove("hidden");
+    if (which === "camera")  formCam.classList.remove("hidden");
   }
 
   function createWolSshRow(action) {
@@ -1961,6 +2005,22 @@ batterySaveBtn.addEventListener("click", async () => {
       } else {
         resetHostForm();
       }
+    } else if (whichType === "camera") {
+      showOnlyForm("camera");
+      if (mode.action === "edit") {
+        const cam = state.cameras.find(c => c.id === mode.id);
+        if (cam) {
+          camNameInput.value     = cam.name || "";
+          camProviderEl.value    = cam.provider || "ip_cam";
+          camHostInput.value     = cam.host || "";
+          camPortInput.value     = cam.port || "";
+          camUsernameInput.value = cam.username || "";
+          camPasswordInput.value = cam.password || "";
+          camNotesInput.value    = cam.notes || "";
+        }
+      } else {
+        resetCameraForm();
+      }
     }
 
     updateFormTitles();
@@ -1977,6 +2037,7 @@ batterySaveBtn.addEventListener("click", async () => {
   tabLnkBtn.addEventListener("click", () => showModal("link",    mode.action === "edit" ? mode.id : null));
   tabWolBtn.addEventListener("click", () => showModal("wol",     mode.action === "edit" ? mode.id : null));
   tabHostBtn.addEventListener("click", () => showModal("host",   mode.action === "edit" ? mode.id : null));
+  tabCamBtn.addEventListener("click", () => showModal("camera",  mode.action === "edit" ? mode.id : null));
 
   // ==============================
   // FORM SUBMIT HANDLERS (CRUD)
@@ -2145,6 +2206,31 @@ if (brandSaveBtn) {
     await loadStateFromServer();
   });
 
+  formCam.addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!editMode) return;
+
+    const body = {
+      name:     camNameInput.value.trim(),
+      provider: camProviderEl.value,
+      host:     camHostInput.value.trim(),
+      port:     camPortInput.value.trim(),
+      username: camUsernameInput.value.trim(),
+      password: camPasswordInput.value,
+      notes:    camNotesInput.value.trim()
+    };
+    if (!body.name || !body.host || !body.port) return;
+
+    if (mode.action === "edit" && mode.id) {
+      await apiJSON("PUT", "/camera/" + mode.id, body);
+    } else {
+      await apiJSON("POST", "/camera", body);
+    }
+
+    hideModal();
+    await loadStateFromServer();
+  });
+
   // ==============================
   // DELETE HANDLERS (with confirm)
   // ==============================
@@ -2188,6 +2274,17 @@ if (brandSaveBtn) {
     await loadStateFromServer();
   }
 
+  async function deleteCamera(id) {
+    if (!editMode) return;
+    const cam = state.cameras.find(c => c.id === id);
+    const name = cam ? cam.name : id;
+    const ok = window.confirm(`Delete camera "${name}"? This cannot be undone.`);
+    if (!ok) return;
+    cameraLiveIds.delete(id);
+    await apiDELETE("/camera/" + id);
+    await loadStateFromServer();
+  }
+
   // ==============================
   // WOL RUN / SSH RUN / HOST RUN
   // ==============================
@@ -2225,11 +2322,70 @@ if (brandSaveBtn) {
   }
 
   // ==============================
+  // CAMERA CONTROLS
+  // ==============================
+  const CAMERA_ROTATIONS = [0, 90, 180, 270];
+
+  function toggleCameraLive(id) {
+    if (cameraLiveIds.has(id)) {
+      cameraLiveIds.delete(id);
+    } else {
+      cameraLiveIds.add(id);
+    }
+    render();
+  }
+
+  async function runCameraSwitch(id) {
+    const resp = await apiPOSTNoBody(`/camera/${id}/switch`);
+    if (resp && resp.ok) {
+      showToast({ title: "Camera", message: "Switched camera", type: "success" });
+    } else {
+      const err = formatActionError(resp);
+      showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
+    }
+    await loadStateFromServer();
+  }
+
+  async function runCameraFlashlight(id) {
+    const resp = await apiJSON("POST", `/camera/${id}/flashlight`, { action: "toggle" });
+    if (resp && resp.ok) {
+      showToast({ title: "Camera", message: "Flashlight toggled", type: "success" });
+    } else {
+      const err = formatActionError(resp);
+      showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
+    }
+    await loadStateFromServer();
+  }
+
+  async function runCameraRotation(id) {
+    const cam = state.cameras.find(c => c.id === id);
+    const current = cam ? Number(cam.rotation) || 0 : 0;
+    const next = CAMERA_ROTATIONS[(CAMERA_ROTATIONS.indexOf(current) + 1) % CAMERA_ROTATIONS.length];
+    const resp = await apiJSON("POST", `/camera/${id}/rotation`, { value: next });
+    if (resp && resp.ok) {
+      showToast({ title: "Camera", message: `Rotated to ${next}°`, type: "success" });
+    } else {
+      const err = formatActionError(resp);
+      showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
+    }
+    await loadStateFromServer();
+  }
+
+  async function runCameraRestart(id) {
+    const resp = await apiPOSTNoBody(`/camera/${id}/restart`);
+    if (resp && resp.ok) {
+      showToast({ title: "Camera", message: "Server restarted", type: "success" });
+    } else {
+      const err = formatActionError(resp);
+      showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
+    }
+    await loadStateFromServer();
+  }
+
+  // ==============================
   // DRAG & DROP (reorder)
   // ==============================
-  let dragSvcIdx = null;
-  let dragLnkIdx = null;
-  let dragWolIdx = null;
+  const dragIndexByType = { service: null, link: null, wol: null, camera: null };
 
   function bindDrag(containerId, type, arr, persistFn) {
     const cont  = document.getElementById(containerId);
@@ -2246,9 +2402,7 @@ if (brandSaveBtn) {
 
       card.addEventListener("dragstart", e => {
         if (!editMode) return;
-        if (type === "service")      dragSvcIdx = idx;
-        else if (type === "link")    dragLnkIdx = idx;
-        else                         dragWolIdx = idx;
+        dragIndexByType[type] = idx;
         e.dataTransfer.effectAllowed = "move";
       });
 
@@ -2268,9 +2422,7 @@ if (brandSaveBtn) {
         e.preventDefault();
         card.classList.remove("drag-over");
 
-        const from = (type === "service") ? dragSvcIdx
-                    : (type === "link")   ? dragLnkIdx
-                    : dragWolIdx;
+        const from = dragIndexByType[type];
         const to = Number(card.dataset.index);
 
         if (Number.isInteger(from) && from !== to) {
@@ -2281,9 +2433,7 @@ if (brandSaveBtn) {
           await loadStateFromServer();
         }
 
-        if (type === "service")      dragSvcIdx = null;
-        else if (type === "link")    dragLnkIdx = null;
-        else                         dragWolIdx = null;
+        dragIndexByType[type] = null;
       });
     });
   }
@@ -2295,6 +2445,7 @@ if (brandSaveBtn) {
     svcCount.textContent = state.services.length + " total";
     lnkCount.textContent = state.links.length + " total";
     wolCount.textContent = state.wol.length + " total";
+    camCount.textContent = state.cameras.length + " total";
 
     // services grid
     svcGrid.innerHTML = state.services.length
@@ -2338,12 +2489,27 @@ if (brandSaveBtn) {
       if (lastCard) lastCard.classList.add("full-span");
     }
 
+    // camera grid
+    camGrid.innerHTML = state.cameras.length
+      ? ""
+      : `<div style="color:var(--text-dim); font-size:.85rem;">No cameras yet</div>`;
+
+    state.cameras.forEach(cam => {
+      const card = renderCameraCard(cam);
+      camGrid.appendChild(card);
+    });
+    if (state.cameras.length % 2 === 1 && state.cameras.length > 0) {
+      const lastCard = camGrid.lastElementChild;
+      if (lastCard) lastCard.classList.add("full-span");
+    }
+
     // host actions in banner
     renderHostActions();
 
     bindDrag("svc-grid", "service", state.services, persistOrderServices);
     bindDrag("lnk-grid", "link", state.links, persistOrderLinks);
     bindDrag("wol-grid", "wol", state.wol, persistOrderWOL);
+    bindDrag("cam-grid", "camera", state.cameras, persistOrderCameras);
   }
 
   function renderServiceCard(s) {
@@ -2590,6 +2756,139 @@ if (brandSaveBtn) {
     row.appendChild(right);
 
     card.appendChild(row);
+    return card;
+  }
+
+  function renderCameraCard(cam) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.type = "camera";
+
+    const top = document.createElement("div");
+    top.className = "svc-top";
+
+    const left = document.createElement("div");
+    left.style.width = "100%";
+
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "svc-name";
+
+    const spanName = document.createElement("span");
+    spanName.textContent = cam.name;
+
+    const spanChip = document.createElement("span");
+    const statusText = cam.lastStatus || "unknown";
+    spanChip.className = statusText === "UP" ? "chip-up" : "chip-down";
+    spanChip.textContent = statusText;
+
+    nameWrap.appendChild(spanName);
+    nameWrap.appendChild(spanChip);
+    left.appendChild(nameWrap);
+
+    if (cam.notes) {
+      const notesEl = document.createElement("div");
+      notesEl.className = "svc-notes";
+      notesEl.textContent = cam.notes;
+      left.appendChild(notesEl);
+    }
+
+    const isLive = cameraLiveIds.has(cam.id);
+
+    const previewWrap = document.createElement("div");
+    previewWrap.className = "cam-preview-wrap";
+
+    const img = document.createElement("img");
+    img.className = "cam-preview";
+    img.alt = `${cam.name} preview`;
+    img.src = `${API_BASE}/camera/${cam.id}/${isLive ? "stream" : "snapshot"}?t=${Date.now()}`;
+    img.onerror = () => {
+      previewWrap.classList.add("cam-preview-error");
+    };
+    previewWrap.appendChild(img);
+
+    const liveBtn = document.createElement("button");
+    liveBtn.type = "button";
+    liveBtn.className = "btn cam-live-btn" + (isLive ? " btn-danger" : "");
+    liveBtn.textContent = isLive ? "Stop live" : "Live";
+    liveBtn.onclick = () => toggleCameraLive(cam.id);
+    previewWrap.appendChild(liveBtn);
+
+    left.appendChild(previewWrap);
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "wol-meta";
+    const chip = document.createElement("span");
+    chip.className = "wol-chip";
+    chip.textContent = cam.lastResult || "never";
+    metaEl.appendChild(chip);
+    metaEl.appendChild(document.createTextNode("  Last action: " + fmt(cam.lastRun)));
+    const connSpan = document.createElement("span");
+    connSpan.className = "cam-connections";
+    connSpan.textContent = "";
+    metaEl.appendChild(connSpan);
+    left.appendChild(metaEl);
+
+    apiGET(`/camera/${cam.id}/connections`).then(resp => {
+      if (resp && resp.ok && resp.data && Array.isArray(resp.data.connections)) {
+        connSpan.textContent = `  •  ${resp.data.connections.length} connection(s)`;
+      } else if (resp && resp.ok && resp.data && Number.isFinite(resp.data.count)) {
+        connSpan.textContent = `  •  ${resp.data.count} connection(s)`;
+      }
+    }).catch(() => {});
+
+    const right = document.createElement("div");
+    right.className = "btn-row";
+
+    const switchBtn = document.createElement("button");
+    switchBtn.className = "btn";
+    switchBtn.textContent = "Switch camera";
+    switchBtn.onclick = () => ensureAdminThen(() => runCameraSwitch(cam.id));
+    right.appendChild(switchBtn);
+
+    const flashBtn = document.createElement("button");
+    flashBtn.className = "btn";
+    flashBtn.textContent = "Flashlight";
+    flashBtn.onclick = () => ensureAdminThen(() => runCameraFlashlight(cam.id));
+    right.appendChild(flashBtn);
+
+    const rotateBtn = document.createElement("button");
+    rotateBtn.className = "btn";
+    rotateBtn.textContent = `Rotate (${cam.rotation || 0}°)`;
+    rotateBtn.onclick = () => ensureAdminThen(() => runCameraRotation(cam.id));
+    right.appendChild(rotateBtn);
+
+    const restartBtn = document.createElement("button");
+    restartBtn.className = "btn btn-danger";
+    restartBtn.textContent = "Restart server";
+    restartBtn.onclick = () => ensureAdminThen(() => runCameraRestart(cam.id));
+    right.appendChild(restartBtn);
+
+    if (editMode) {
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-edit btn-icon-only";
+      editBtn.innerHTML = ICON_BTN_EDIT;
+      editBtn.setAttribute("aria-label", "Edit");
+      editBtn.title = "Edit";
+      editBtn.onclick = () => showModal("camera", cam.id);
+      right.appendChild(editBtn);
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-icon-only";
+      delBtn.innerHTML = ICON_BTN_DELETE;
+      delBtn.setAttribute("aria-label", "Delete");
+      delBtn.title = "Delete";
+      delBtn.onclick = () => deleteCamera(cam.id);
+      right.appendChild(delBtn);
+    }
+
+    top.appendChild(left);
+    card.appendChild(top);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.appendChild(right);
+    card.appendChild(meta);
+
     return card;
   }
 
