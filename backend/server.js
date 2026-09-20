@@ -66,8 +66,15 @@ app.use(express.json());
 app.use(cookieParser());
 
 if (fs.existsSync(FRONTEND_INDEX)) {
-  app.use(express.static(FRONTEND_DIR));
+  // `no-cache` (not `no-store`) keeps ETag/Last-Modified conditional requests
+  // working, but forces every hop — browser and any reverse proxy/tunnel in
+  // front of Wadboard — to revalidate with this server instead of silently
+  // serving a stale copy of app.js/styles.css after a deploy.
+  const noCacheHeaders = (res) => res.setHeader("Cache-Control", "no-cache");
+
+  app.use(express.static(FRONTEND_DIR, { setHeaders: noCacheHeaders }));
   app.get(["/", "/health"], (req, res) => {
+    noCacheHeaders(res);
     res.sendFile(FRONTEND_INDEX);
   });
 }
