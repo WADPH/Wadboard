@@ -637,27 +637,31 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
     res.json({ ok: true });
   });
 
-  // Read-only: available to any viewer with dashboard access, same level as /api/state.
-  app.get("/api/camera/:id/snapshot", requireViewAccess, async (req, res) => {
+  // Actually viewing a camera (feed or its live status) requires the admin
+  // password, unlike the card metadata in /api/state — otherwise anyone with
+  // plain view access (which can be public when private mode is off) could
+  // hit these URLs directly with the camera id and watch the feed without
+  // ever being prompted.
+  app.get("/api/camera/:id/snapshot", requireAdmin, async (req, res) => {
     const cam = findCamera(req.params.id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
     await cameraApi.proxySnapshot(cam, res);
   });
 
-  app.get("/api/camera/:id/stream", requireViewAccess, async (req, res) => {
+  app.get("/api/camera/:id/stream", requireAdmin, async (req, res) => {
     const cam = findCamera(req.params.id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
     await cameraApi.proxyStream(cam, req, res);
   });
 
-  app.get("/api/camera/:id/status", requireViewAccess, async (req, res) => {
+  app.get("/api/camera/:id/status", requireAdmin, async (req, res) => {
     const cam = findCamera(req.params.id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
     const result = await cameraApi.getStatus(cam);
     res.json(result);
   });
 
-  app.get("/api/camera/:id/connections", requireViewAccess, async (req, res) => {
+  app.get("/api/camera/:id/connections", requireAdmin, async (req, res) => {
     const cam = findCamera(req.params.id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
     const result = await cameraApi.getConnections(cam);

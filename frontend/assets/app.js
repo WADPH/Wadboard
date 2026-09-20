@@ -2439,25 +2439,33 @@ if (brandSaveBtn) {
     await loadStateFromServer();
   }
 
+  // Opening the popup already required the admin password (see the eye
+  // button below): getting this far means an admin session cookie exists,
+  // so these controls call the protected endpoints directly without
+  // prompting again.
   if (cameraViewCloseBtn) cameraViewCloseBtn.addEventListener("click", closeCameraView);
   if (cameraViewSwitchBtn) {
     cameraViewSwitchBtn.addEventListener("click", () => {
-      if (cameraViewId) ensureAdminThen(() => runCameraSwitch(cameraViewId));
+      if (cameraViewId) runCameraSwitch(cameraViewId);
     });
   }
   if (cameraViewFlashBtn) {
     cameraViewFlashBtn.addEventListener("click", () => {
-      if (cameraViewId) ensureAdminThen(() => runCameraFlashlight(cameraViewId));
+      if (cameraViewId) runCameraFlashlight(cameraViewId);
     });
   }
   if (cameraViewRotateBtn) {
     cameraViewRotateBtn.addEventListener("click", () => {
-      if (cameraViewId) ensureAdminThen(() => runCameraRotation(cameraViewId));
+      if (cameraViewId) runCameraRotation(cameraViewId);
     });
   }
   if (cameraViewRestartBtn) {
     cameraViewRestartBtn.addEventListener("click", () => {
-      if (cameraViewId) ensureAdminThen(() => runCameraRestart(cameraViewId));
+      if (!cameraViewId) return;
+      const cam = state.cameras.find(c => c.id === cameraViewId);
+      const ok = window.confirm(`Restart the camera server on "${cam ? cam.name : cameraViewId}"? The video feed will briefly disconnect.`);
+      if (!ok) return;
+      runCameraRestart(cameraViewId);
     });
   }
 
@@ -2878,7 +2886,7 @@ if (brandSaveBtn) {
     viewBtn.innerHTML = ICON_BTN_EYE;
     viewBtn.setAttribute("aria-label", `View ${cam.name}`);
     viewBtn.title = "View camera";
-    viewBtn.onclick = () => openCameraView(cam.id);
+    viewBtn.onclick = () => ensureAdminThen(() => openCameraView(cam.id));
     right.appendChild(viewBtn);
 
     if (editMode) {
