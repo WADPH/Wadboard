@@ -16,10 +16,11 @@
 
   let editMode = false;
   let state = { services: [], links: [], wol: [], hostActions: [], cameras: [] };
-  // Camera ids currently showing the live MJPEG stream instead of a snapshot.
-  // Kept outside `state` so it survives the periodic re-render triggered by
-  // the 10s auto-refresh loop.
-  const cameraLiveIds = new Set();
+  // Id of the camera whose live-view popup is open, if any. The popup lives
+  // outside the main grid so the 10s auto-refresh loop (which rebuilds
+  // svc/lnk/wol/cam grids) never touches its <img>, otherwise the MJPEG
+  // stream would be torn down and reconnected every cycle.
+  let cameraViewId = null;
   let privateAccessMode = false;
   let viewAccessGranted = true;
   let appStarted = false;
@@ -69,6 +70,16 @@
   const camUsernameInput = document.getElementById("cam-username");
   const camPasswordInput = document.getElementById("cam-password");
   const camNotesInput    = document.getElementById("cam-notes");
+
+  const cameraViewOverlay  = document.getElementById("camera-view-overlay");
+  const cameraViewTitleEl  = document.getElementById("camera-view-title");
+  const cameraViewCloseBtn = document.getElementById("camera-view-close");
+  const cameraViewImgEl    = document.getElementById("camera-view-img");
+  const cameraViewStatusEl = document.getElementById("camera-view-status");
+  const cameraViewSwitchBtn  = document.getElementById("camera-view-switch");
+  const cameraViewFlashBtn   = document.getElementById("camera-view-flash");
+  const cameraViewRotateBtn  = document.getElementById("camera-view-rotate");
+  const cameraViewRestartBtn = document.getElementById("camera-view-restart");
 
   const svcGrid = document.getElementById("svc-grid");
   const lnkGrid = document.getElementById("lnk-grid");
@@ -380,6 +391,7 @@
   const ICON_BTN_PLUS = `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"></path></svg><span class="sr-only">Add</span>`;
   const ICON_BTN_EDIT = `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/></svg><span class="sr-only">Edit</span>`;
   const ICON_BTN_DELETE = `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0"/></svg><span class="sr-only">Delete</span>`;
+  const ICON_BTN_EYE = `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg><span class="sr-only">View</span>`;
   const ACTION_ICON_OPTIONS = [
     { key: "", label: "No icon" },
     { key: "external-link", label: "External Link", svg: `<svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 1a.5.5 0 0 0 0 1h2.793L8.146 7.146a.5.5 0 1 0 .708.708L14 2.707V5.5a.5.5 0 0 0 1 0v-4A.5.5 0 0 0 14.5 1z"></path><path d="M13.5 14h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2H7a.5.5 0 0 1 0 1H2.5a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V8a.5.5 0 0 1 1 0v4.5a1.5 1.5 0 0 1-1.5 1.5"></path></svg>` },
@@ -2280,7 +2292,7 @@ if (brandSaveBtn) {
     const name = cam ? cam.name : id;
     const ok = window.confirm(`Delete camera "${name}"? This cannot be undone.`);
     if (!ok) return;
-    cameraLiveIds.delete(id);
+    if (cameraViewId === id) closeCameraView();
     await apiDELETE("/camera/" + id);
     await loadStateFromServer();
   }
@@ -2326,13 +2338,57 @@ if (brandSaveBtn) {
   // ==============================
   const CAMERA_ROTATIONS = [0, 90, 180, 270];
 
-  function toggleCameraLive(id) {
-    if (cameraLiveIds.has(id)) {
-      cameraLiveIds.delete(id);
-    } else {
-      cameraLiveIds.add(id);
+  // The popup is opened/closed independently of render(), so the 10s
+  // auto-refresh loop (which rebuilds the dashboard grids) never touches
+  // camera-view-img — the MJPEG connection stays open until the user closes
+  // the popup or switches camera.
+  function openCameraView(id) {
+    const cam = state.cameras.find(c => c.id === id);
+    if (!cam) return;
+
+    cameraViewId = id;
+    cameraViewTitleEl.textContent = cam.name || "Camera";
+    cameraViewRotateBtn.textContent = `Rotate (${cam.rotation || 0}°)`;
+    cameraViewStatusEl.textContent = "";
+    cameraViewImgEl.src = `${API_BASE}/camera/${id}/stream?t=${Date.now()}`;
+    cameraViewOverlay.classList.remove("hidden");
+
+    refreshCameraViewStatus();
+  }
+
+  function closeCameraView() {
+    cameraViewOverlay.classList.add("hidden");
+    // Clearing src aborts the in-flight MJPEG request instead of leaving it
+    // open in the background after the popup is closed.
+    cameraViewImgEl.src = "";
+    cameraViewId = null;
+  }
+
+  async function refreshCameraViewStatus() {
+    const id = cameraViewId;
+    if (!id) return;
+
+    const [statusResp, connResp] = await Promise.all([
+      apiGET(`/camera/${id}/status`),
+      apiGET(`/camera/${id}/connections`)
+    ]);
+    if (cameraViewId !== id) return; // popup switched/closed while awaiting
+
+    const parts = [];
+    parts.push(statusResp && statusResp.ok ? "Status: reachable" : "Status: unreachable");
+    const conns = connResp && connResp.ok && connResp.data;
+    if (conns && Array.isArray(conns.connections)) {
+      parts.push(`${conns.connections.length} connection(s)`);
+    } else if (conns && Number.isFinite(conns.count)) {
+      parts.push(`${conns.count} connection(s)`);
     }
-    render();
+    cameraViewStatusEl.textContent = parts.join("  •  ");
+  }
+
+  function refreshCameraViewRotationLabel(id) {
+    if (cameraViewId !== id) return;
+    const cam = state.cameras.find(c => c.id === id);
+    cameraViewRotateBtn.textContent = `Rotate (${cam ? (cam.rotation || 0) : 0}°)`;
   }
 
   async function runCameraSwitch(id) {
@@ -2369,6 +2425,7 @@ if (brandSaveBtn) {
       showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
     }
     await loadStateFromServer();
+    refreshCameraViewRotationLabel(id);
   }
 
   async function runCameraRestart(id) {
@@ -2380,6 +2437,28 @@ if (brandSaveBtn) {
       showToast({ title: "Camera", message: err.message, detail: err.detail, type: "error" });
     }
     await loadStateFromServer();
+  }
+
+  if (cameraViewCloseBtn) cameraViewCloseBtn.addEventListener("click", closeCameraView);
+  if (cameraViewSwitchBtn) {
+    cameraViewSwitchBtn.addEventListener("click", () => {
+      if (cameraViewId) ensureAdminThen(() => runCameraSwitch(cameraViewId));
+    });
+  }
+  if (cameraViewFlashBtn) {
+    cameraViewFlashBtn.addEventListener("click", () => {
+      if (cameraViewId) ensureAdminThen(() => runCameraFlashlight(cameraViewId));
+    });
+  }
+  if (cameraViewRotateBtn) {
+    cameraViewRotateBtn.addEventListener("click", () => {
+      if (cameraViewId) ensureAdminThen(() => runCameraRotation(cameraViewId));
+    });
+  }
+  if (cameraViewRestartBtn) {
+    cameraViewRestartBtn.addEventListener("click", () => {
+      if (cameraViewId) ensureAdminThen(() => runCameraRestart(cameraViewId));
+    });
   }
 
   // ==============================
@@ -2768,7 +2847,6 @@ if (brandSaveBtn) {
     top.className = "svc-top";
 
     const left = document.createElement("div");
-    left.style.width = "100%";
 
     const nameWrap = document.createElement("div");
     nameWrap.className = "svc-name";
@@ -2792,76 +2870,16 @@ if (brandSaveBtn) {
       left.appendChild(notesEl);
     }
 
-    const isLive = cameraLiveIds.has(cam.id);
-
-    const previewWrap = document.createElement("div");
-    previewWrap.className = "cam-preview-wrap";
-
-    const img = document.createElement("img");
-    img.className = "cam-preview";
-    img.alt = `${cam.name} preview`;
-    img.src = `${API_BASE}/camera/${cam.id}/${isLive ? "stream" : "snapshot"}?t=${Date.now()}`;
-    img.onerror = () => {
-      previewWrap.classList.add("cam-preview-error");
-    };
-    previewWrap.appendChild(img);
-
-    const liveBtn = document.createElement("button");
-    liveBtn.type = "button";
-    liveBtn.className = "btn cam-live-btn" + (isLive ? " btn-danger" : "");
-    liveBtn.textContent = isLive ? "Stop live" : "Live";
-    liveBtn.onclick = () => toggleCameraLive(cam.id);
-    previewWrap.appendChild(liveBtn);
-
-    left.appendChild(previewWrap);
-
-    const metaEl = document.createElement("div");
-    metaEl.className = "wol-meta";
-    const chip = document.createElement("span");
-    chip.className = "wol-chip";
-    chip.textContent = cam.lastResult || "never";
-    metaEl.appendChild(chip);
-    metaEl.appendChild(document.createTextNode("  Last action: " + fmt(cam.lastRun)));
-    const connSpan = document.createElement("span");
-    connSpan.className = "cam-connections";
-    connSpan.textContent = "";
-    metaEl.appendChild(connSpan);
-    left.appendChild(metaEl);
-
-    apiGET(`/camera/${cam.id}/connections`).then(resp => {
-      if (resp && resp.ok && resp.data && Array.isArray(resp.data.connections)) {
-        connSpan.textContent = `  •  ${resp.data.connections.length} connection(s)`;
-      } else if (resp && resp.ok && resp.data && Number.isFinite(resp.data.count)) {
-        connSpan.textContent = `  •  ${resp.data.count} connection(s)`;
-      }
-    }).catch(() => {});
-
     const right = document.createElement("div");
     right.className = "btn-row";
 
-    const switchBtn = document.createElement("button");
-    switchBtn.className = "btn";
-    switchBtn.textContent = "Switch camera";
-    switchBtn.onclick = () => ensureAdminThen(() => runCameraSwitch(cam.id));
-    right.appendChild(switchBtn);
-
-    const flashBtn = document.createElement("button");
-    flashBtn.className = "btn";
-    flashBtn.textContent = "Flashlight";
-    flashBtn.onclick = () => ensureAdminThen(() => runCameraFlashlight(cam.id));
-    right.appendChild(flashBtn);
-
-    const rotateBtn = document.createElement("button");
-    rotateBtn.className = "btn";
-    rotateBtn.textContent = `Rotate (${cam.rotation || 0}°)`;
-    rotateBtn.onclick = () => ensureAdminThen(() => runCameraRotation(cam.id));
-    right.appendChild(rotateBtn);
-
-    const restartBtn = document.createElement("button");
-    restartBtn.className = "btn btn-danger";
-    restartBtn.textContent = "Restart server";
-    restartBtn.onclick = () => ensureAdminThen(() => runCameraRestart(cam.id));
-    right.appendChild(restartBtn);
+    const viewBtn = document.createElement("button");
+    viewBtn.className = "btn btn-icon-only";
+    viewBtn.innerHTML = ICON_BTN_EYE;
+    viewBtn.setAttribute("aria-label", `View ${cam.name}`);
+    viewBtn.title = "View camera";
+    viewBtn.onclick = () => openCameraView(cam.id);
+    right.appendChild(viewBtn);
 
     if (editMode) {
       const editBtn = document.createElement("button");
@@ -2882,11 +2900,15 @@ if (brandSaveBtn) {
     }
 
     top.appendChild(left);
+    top.appendChild(right);
     card.appendChild(top);
 
     const meta = document.createElement("div");
     meta.className = "meta";
-    meta.appendChild(right);
+    const g1 = document.createElement("div");
+    g1.className = "group";
+    g1.innerHTML = `<b>Last action</b>${cam.lastResult || "never"} · ${fmt(cam.lastRun)}`;
+    meta.appendChild(g1);
     card.appendChild(meta);
 
     return card;

@@ -838,6 +838,30 @@
   </div>
 </div>
 
+<!-- Camera view overlay -->
+<div class="overlay hidden" id="camera-view-overlay">
+  <div class="modal camera-view-modal">
+    <div class="modal-top">
+      <div style="font-weight:800; font-size:.9rem; color:var(--text-main);" id="camera-view-title">
+        Camera
+      </div>
+      <button class="close" id="camera-view-close">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="cam-view-stage">
+        <img id="camera-view-img" class="cam-view-img" alt="Camera stream" />
+      </div>
+      <div id="camera-view-status" class="inline-status"></div>
+      <div class="btn-row" id="camera-view-controls">
+        <button class="btn" type="button" id="camera-view-switch">Switch camera</button>
+        <button class="btn" type="button" id="camera-view-flash">Flashlight</button>
+        <button class="btn" type="button" id="camera-view-rotate">Rotate</button>
+        <button class="btn btn-danger" type="button" id="camera-view-restart">Restart server</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Action results / error notifications -->
 <div id="toast-stack" class="toast-stack"></div>
 
