@@ -11,6 +11,7 @@ import { createHealthModule } from "./src/health.js";
 import { createActionsModule } from "./src/actions.js";
 import { createCameraModule } from "./src/camera.js";
 import { createTerminalModule } from "./src/terminal.js";
+import { createIconsModule } from "./src/icons.js";
 import { registerAppRoutes } from "./src/routes.js";
 import * as logger from "./src/logger.js";
 
@@ -27,6 +28,7 @@ const actionsApi = createActionsModule({ dbApi });
 const cameraApi = createCameraModule({ dbApi });
 const healthApi = createHealthModule({ dbApi, cameraApi });
 const terminalApi = createTerminalModule({ authApi });
+const iconsApi = createIconsModule();
 
 const app = express();
 
@@ -47,6 +49,8 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "https://unpkg.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+      // Remote (Iconify) icons and icon search go through /api/icons on this
+      // origin (see src/icons.js), so no third-party image/connect source is needed.
       imgSrc: ["'self'", "data:"],
       fontSrc: ["'self'", "https://unpkg.com"],
       connectSrc: ["'self'", "ws:", "wss:"],
@@ -82,6 +86,7 @@ if (fs.existsSync(FRONTEND_INDEX)) {
 authApi.registerRoutes(app, { terminalApi });
 healthApi.registerRoutes(app, { authApi });
 terminalApi.registerRoutes(app);
+iconsApi.registerRoutes(app, { authApi });
 registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi });
 
 healthApi.startMonitoring();

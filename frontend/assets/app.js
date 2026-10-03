@@ -430,18 +430,24 @@
     return ACTION_ICON_MAP[String(iconKey || "").trim()] || null;
   }
 
+  // Iconify "prefix:name" — same rule the backend proxy enforces. Anything else
+  // is never turned into a URL, so a stored icon value can't break out of the
+  // inline mask-image style.
+  const REMOTE_ICON_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
   function getRemoteIconUrl(iconKey) {
     const normalized = String(iconKey || "").trim();
-    if (!normalized || !normalized.includes(":")) return "";
-    return `https://api.iconify.design/${encodeURIComponent(normalized)}.svg`;
+    if (!REMOTE_ICON_RE.test(normalized)) return "";
+    // Served through our backend so the CSP can stay img-src 'self'.
+    return `/api/icons/svg/${encodeURIComponent(normalized)}`;
   }
 
   function getActionIconMarkup(iconKey) {
     const normalized = String(iconKey || "").trim();
     const localDef = getActionIconDefinition(normalized);
     if (localDef) return localDef.svg;
-    if (normalized.includes(":")) {
-      const iconUrl = getRemoteIconUrl(normalized);
+    const iconUrl = getRemoteIconUrl(normalized);
+    if (iconUrl) {
       return `<span class="remote-icon" aria-hidden="true" style="-webkit-mask-image:url('${iconUrl}');mask-image:url('${iconUrl}');"></span>`;
     }
     return "";
@@ -548,12 +554,9 @@
     if (iconSearchAbortController) iconSearchAbortController.abort();
     iconSearchAbortController = new AbortController();
 
-    const params = new URLSearchParams({
-      query,
-      limit: "120"
-    });
+    const params = new URLSearchParams({ query });
 
-    const res = await fetch(`https://api.iconify.design/search?${params.toString()}`, {
+    const res = await fetch(`/api/icons/search?${params.toString()}`, {
       signal: iconSearchAbortController.signal
     });
     if (!res.ok) throw new Error("search_failed");
