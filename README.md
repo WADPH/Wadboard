@@ -265,4 +265,5 @@ The log file includes startup messages, errors, warnings and audit events with t
 
 - Wadboard is intended for trusted internal networks.
 - It should not be exposed directly to the public internet without an additional reverse proxy and access hardening.
+- A reverse proxy/tunnel running on the same host (nginx, Caddy, cloudflared, ...) is trusted automatically for `X-Forwarded-For`, so logs, login lock-outs and notifications see the real client IP. If the proxy runs on another machine, start Wadboard with `TRUST_PROXY=<proxy IP>`; `TRUST_PROXY=0` disables forwarded headers entirely.
 - Some features are host-dependent and degrade gracefully if the underlying tools are not installed.

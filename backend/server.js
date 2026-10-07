@@ -34,13 +34,15 @@ const iconsApi = createIconsModule();
 
 const app = express();
 
-// Off by default: without a reverse proxy in front of Wadboard, trusting
-// X-Forwarded-For/X-Forwarded-Proto would let any client spoof its IP (bypassing
-// login lock-outs and poisoning the audit log) or fake an HTTPS connection
-// (making cookies think they're safe to send unencrypted). Set TRUST_PROXY=1
-// only when Wadboard sits behind a reverse proxy/tunnel that sets those headers.
-const TRUST_PROXY = process.env.TRUST_PROXY;
-if (TRUST_PROXY) {
+// X-Forwarded-For/X-Forwarded-Proto are only honoured when the connection comes
+// from a proxy on this same host (nginx, Caddy, cloudflared, ...), so the real
+// client IP reaches login lock-outs, the audit log and camera notifications.
+// Clients connecting directly arrive from a non-loopback address, so their
+// forwarded headers are ignored and cannot be used to spoof an IP or fake HTTPS.
+// TRUST_PROXY overrides this: any Express "trust proxy" value (e.g. "1" or a
+// proxy's address when it runs on another machine), or "0"/"false" to disable.
+const TRUST_PROXY = String(process.env.TRUST_PROXY || "loopback").trim();
+if (TRUST_PROXY !== "0" && TRUST_PROXY.toLowerCase() !== "false") {
   app.set("trust proxy", TRUST_PROXY === "1" ? 1 : TRUST_PROXY);
 }
 
