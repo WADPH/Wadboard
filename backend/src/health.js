@@ -3,13 +3,15 @@ import os from "os";
 import https from "https";
 import fetch from "node-fetch";
 import { exec } from "child_process";
-import { error as logError, warn as logWarn } from "./logger.js";
+import { error as logError } from "./logger.js";
 import { isAndroidLike, execCmd } from "./platform.js";
 
-export function createHealthModule({ dbApi, cameraApi }) {
+export function createHealthModule({ dbApi, cameraApi, notificationsApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const getBatteryAlertsConfig = dbApi.getBatteryAlertsConfig;
+  const getTelegramConfig = dbApi.getTelegramConfig;
+  const sendTelegram = notificationsApi.sendTelegram;
   const probeCameraStatus = cameraApi?.probeCameraStatus || (async () => {});
 
   // -----------------------
@@ -168,43 +170,14 @@ export function createHealthModule({ dbApi, cameraApi }) {
   // -----------------------
   async function sendBatteryAlert(level, percentage) {
     const cfg = getBatteryAlertsConfig();
-    if (!cfg.telegramBotToken || !cfg.telegramChatId) {
-      logWarn("Battery alert enabled but Telegram token/chat not configured");
-      return false;
-    }
-
-    const text = `🪫Wadboard host battery low: ${percentage}% (threshold ${level}%)`;
-    const url = `https://api.telegram.org/bot${cfg.telegramBotToken}/sendMessage`;
-    const payload = {
-      chat_id: cfg.telegramChatId,
-      text
-    };
-
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(url, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        logError("Battery alert send failed", { status: res.status, statusText: res.statusText });
-        return false;
-      }
-      return true;
-    } catch (err) {
-      logError("Battery alert send error", err);
-      return false;
-    }
+    const text = `🪫 Wadboard host battery low: ${percentage}% (threshold ${level}%)`;
+    const result = await sendTelegram(text, { silent: !!cfg.silent });
+    return result.ok;
   }
 
   function checkBatteryAlerts() {
     const cfg = getBatteryAlertsConfig();
-    if (!cfg.enabled) return;
+    if (!cfg.enabled || !getTelegramConfig().enabled) return;
 
     const pct = Number(hostInfo.percentage);
     if (!Number.isFinite(pct)) return;
@@ -788,14 +761,13 @@ export function createHealthModule({ dbApi, cameraApi }) {
       res.json({
         enabled: !!cfg.enabled,
         levels: Array.isArray(cfg.levels) ? cfg.levels : [30, 15, 5],
-        telegramBotToken: cfg.telegramBotToken || "",
-        telegramChatId: cfg.telegramChatId || ""
+        silent: !!cfg.silent
       });
     });
 
     app.put("/api/battery-alerts", requireAdmin, (req, res) => {
       const cfg = getBatteryAlertsConfig();
-      const { enabled, levels, telegramBotToken, telegramChatId } = req.body || {};
+      const { enabled, levels, silent } = req.body || {};
 
       if (typeof enabled === "boolean") {
         cfg.enabled = enabled;
@@ -811,11 +783,8 @@ export function createHealthModule({ dbApi, cameraApi }) {
         }
       }
 
-      if (typeof telegramBotToken === "string") {
-        cfg.telegramBotToken = telegramBotToken.trim();
-      }
-      if (typeof telegramChatId === "string") {
-        cfg.telegramChatId = telegramChatId.trim();
+      if (typeof silent === "boolean") {
+        cfg.silent = silent;
       }
 
       saveDB();
@@ -824,7 +793,8 @@ export function createHealthModule({ dbApi, cameraApi }) {
         ok: true,
         config: {
           enabled: cfg.enabled,
-          levels: cfg.levels
+          levels: cfg.levels,
+          silent: cfg.silent
         }
       });
     });

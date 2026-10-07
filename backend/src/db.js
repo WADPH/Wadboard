@@ -143,6 +143,12 @@ function transformSensitiveFields(dbObj, transform) {
     });
   }
 
+  if (cloned.config && cloned.config.telegram && cloned.config.telegram.botToken) {
+    cloned.config.telegram.botToken = transform(cloned.config.telegram.botToken);
+  }
+
+  // Legacy location of the bot token (pre-"Telegram Notifications" configs);
+  // still decrypted on load so ensureConfigStructure can migrate it.
   if (cloned.config && cloned.config.batteryAlerts && cloned.config.batteryAlerts.telegramBotToken) {
     cloned.config.batteryAlerts.telegramBotToken = transform(cloned.config.batteryAlerts.telegramBotToken);
   }
@@ -159,13 +165,38 @@ function transformSensitiveFields(dbObj, transform) {
 // -----------------------
 // In-memory DB
 // -----------------------
+function defaultTelegramConfig() {
+  return {
+    enabled: false,
+    botToken: "",
+    chatId: ""
+  };
+}
+
 function defaultBatteryAlertsConfig() {
   return {
     enabled: false,
     levels: [30, 15, 5],
-    telegramBotToken: "",
-    telegramChatId: "",
+    silent: false,
     lastNotifiedLevel: null
+  };
+}
+
+function defaultCameraAlertsConfig() {
+  return {
+    enabled: false
+  };
+}
+
+// Per-camera Telegram rules. Stored on the camera itself so the camera form
+// and the Settings > Camera monitoring list always edit the same values.
+function normalizeCameraMonitoring(input) {
+  const src = input && typeof input === "object" ? input : {};
+  return {
+    onAccess: !!src.onAccess,
+    onAccessSilent: !!src.onAccessSilent,
+    onLeave: !!src.onLeave,
+    onLeaveSilent: !!src.onLeaveSilent
   };
 }
 
@@ -187,7 +218,9 @@ function buildEmptyDb() {
     hostActions: [],
     cameras: [],
     config: {
+      telegram: defaultTelegramConfig(),
       batteryAlerts: defaultBatteryAlertsConfig(),
+      cameraAlerts: defaultCameraAlertsConfig(),
       brandText: "",
       privateMode: false
     },
@@ -220,13 +253,37 @@ function ensureConfigStructure() {
   }
   if (!db.config.batteryAlerts || typeof db.config.batteryAlerts !== "object") {
     db.config.batteryAlerts = defaultBatteryAlertsConfig();
+  }
+
+  if (!db.config.telegram || typeof db.config.telegram !== "object") {
+    // Migrate the bot token/chat ID that used to live under batteryAlerts. The
+    // integration starts enabled when credentials were already configured, so
+    // existing battery alerts keep working after the upgrade.
+    const legacy = db.config.batteryAlerts;
+    const botToken = typeof legacy.telegramBotToken === "string" ? legacy.telegramBotToken : "";
+    const chatId = typeof legacy.telegramChatId === "string" ? legacy.telegramChatId : "";
+    db.config.telegram = { enabled: !!(botToken && chatId), botToken, chatId };
   } else {
+    const tg = db.config.telegram;
+    if (typeof tg.enabled !== "boolean") tg.enabled = false;
+    if (typeof tg.botToken !== "string") tg.botToken = "";
+    if (typeof tg.chatId !== "string") tg.chatId = "";
+  }
+
+  {
     const cfg = db.config.batteryAlerts;
+    delete cfg.telegramBotToken;
+    delete cfg.telegramChatId;
     if (cfg.enabled === undefined) cfg.enabled = false;
     if (!Array.isArray(cfg.levels) || !cfg.levels.length) cfg.levels = [30, 15, 5];
-    if (typeof cfg.telegramBotToken !== "string") cfg.telegramBotToken = "";
-    if (typeof cfg.telegramChatId !== "string") cfg.telegramChatId = "";
+    if (typeof cfg.silent !== "boolean") cfg.silent = false;
     if (!("lastNotifiedLevel" in cfg)) cfg.lastNotifiedLevel = null;
+  }
+
+  if (!db.config.cameraAlerts || typeof db.config.cameraAlerts !== "object") {
+    db.config.cameraAlerts = defaultCameraAlertsConfig();
+  } else if (typeof db.config.cameraAlerts.enabled !== "boolean") {
+    db.config.cameraAlerts.enabled = false;
   }
 
   if (typeof db.config.brandText !== "string") {
@@ -247,6 +304,16 @@ if (typeof db.config.privateMode !== "boolean") {
 function getBatteryAlertsConfig() {
   ensureConfigStructure();
   return db.config.batteryAlerts;
+}
+
+function getTelegramConfig() {
+  ensureConfigStructure();
+  return db.config.telegram;
+}
+
+function getCameraAlertsConfig() {
+  ensureConfigStructure();
+  return db.config.cameraAlerts;
 }
 
 function getBrandTextConfig() {
@@ -329,6 +396,7 @@ function ensureNormalizedDb(input) {
     if (cam.lastChecked === undefined) cam.lastChecked = null;
     if (cam.lastRun === undefined) cam.lastRun = null;
     if (cam.lastResult === undefined) cam.lastResult = "never";
+    cam.monitoring = normalizeCameraMonitoring(cam.monitoring);
   });
 
   if (nextDb !== db) {
@@ -429,12 +497,15 @@ function getDB() {
 export {
   DATA_FILE,
   defaultBatteryAlertsConfig,
+  normalizeCameraMonitoring,
   sanitizeBrandText,
   hashPassword,
   checkPassword,
   makeId,
   ensureConfigStructure,
   getBatteryAlertsConfig,
+  getTelegramConfig,
+  getCameraAlertsConfig,
   getBrandTextConfig,
   ensureNormalizedDb,
   loadDB,

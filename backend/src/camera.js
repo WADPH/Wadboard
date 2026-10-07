@@ -120,10 +120,16 @@ export function createCameraModule({ dbApi }) {
   // MJPEG is a long-lived connection: the upstream fetch is aborted as soon as
   // either side disconnects, otherwise a viewer closing the tab would leave the
   // request (and the camera's connection slot) open indefinitely.
-  async function proxyStream(camera, req, res) {
+  // `hooks.onResult({ ok })` fires once the upstream outcome is known and
+  // `hooks.onEnd()` once a successfully opened stream is closed by either side
+  // (used for the camera view notifications).
+  async function proxyStream(camera, req, res, hooks = {}) {
     const controller = new AbortController();
     const onClose = () => controller.abort();
     req.on("close", onClose);
+    const fire = (name, arg) => {
+      try { if (typeof hooks[name] === "function") hooks[name](arg); } catch (err) { logError(`Camera stream ${name} hook error`, err); }
+    };
 
     try {
       const upstream = await fetch(buildCameraUrl(camera, "/stream"), {
@@ -133,6 +139,7 @@ export function createCameraModule({ dbApi }) {
 
       if (!upstream.ok || !upstream.body) {
         req.removeListener("close", onClose);
+        fire("onResult", { ok: false });
         return res.status(502).json({ error: "camera_unreachable" });
       }
 
@@ -143,10 +150,16 @@ export function createCameraModule({ dbApi }) {
       upstream.body.on("error", () => {
         try { res.end(); } catch { /* ignore */ }
       });
-      res.on("close", () => controller.abort());
+      res.on("close", () => {
+        controller.abort();
+        fire("onEnd");
+      });
+      fire("onResult", { ok: true });
       upstream.body.pipe(res);
     } catch (err) {
       req.removeListener("close", onClose);
+      // An abort here means the viewer left before the camera answered.
+      if (!controller.signal.aborted) fire("onResult", { ok: false });
       if (!res.headersSent) {
         res.status(502).json({ error: "camera_unreachable", detail: err && err.message ? err.message : String(err) });
       } else {

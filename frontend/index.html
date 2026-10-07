@@ -586,6 +586,11 @@
         <textarea class="textarea" id="cam-notes" placeholder="Short notes"></textarea>
       </div>
 
+      <div class="field hidden" id="cam-monitoring-block">
+        <label class="label">Enable monitoring (Telegram)</label>
+        <div id="cam-monitoring-rules"></div>
+      </div>
+
       <button class="btn submit" type="submit" id="cam-submit">Create Camera</button>
     </form>
   </div>
@@ -650,7 +655,7 @@
   </div>
 </div>
 
-<!-- Settings modal (edit mode + battery monitoring) -->
+<!-- Settings modal (edit mode + Telegram notifications) -->
 <div class="overlay hidden" id="settings-overlay">
   <div class="modal">
     <div class="modal-top">
@@ -732,37 +737,81 @@
 
     <div class="form" style="margin-top:1rem;">
       <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
-        <span>Battery monitoring</span>
-        <label class="switch" for="battery-enabled">
-          <input type="checkbox" id="battery-enabled" />
+        <span>Telegram Notifications</span>
+        <label class="switch" for="telegram-enabled">
+          <input type="checkbox" id="telegram-enabled" />
           <span class="switch-track"><span class="switch-thumb"></span></span>
         </label>
       </h3>
       <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
-        Only for Termux host with <b>termux-api</b> installed. Alerts are sent when battery percentage
-        drops below configured levels.
+        Shared Telegram bot used by Battery and Camera monitoring. When turned off, nothing is sent,
+        but all monitoring settings below are kept.
       </p>
 
       <div class="field">
-        <label class="label">Alert levels (%)</label>
-        <input class="input" id="battery-levels" placeholder="30,15,5" />
-        <div style="font-size:.75rem; color:var(--text-dim);">
-          Comma-separated list, highest to lowest. Example: 30,15,5
-        </div>
-      </div>
-
-      <div class="field">
         <label class="label">Telegram bot token</label>
-        <input class="input" id="battery-bot-token" placeholder="123456:ABC-DEF..." />
+        <input class="input" id="telegram-bot-token" placeholder="123456:ABC-DEF..." autocomplete="off" />
       </div>
 
       <div class="field">
         <label class="label">Telegram chat ID</label>
-        <input class="input" id="battery-chat-id" placeholder="@channel or numeric chat id" />
+        <input class="input" id="telegram-chat-id" placeholder="@channel or numeric chat id" autocomplete="off" />
       </div>
 
-      <button class="btn submit" type="button" id="battery-save-btn">Save battery settings</button>
-      <div id="battery-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button class="btn submit" type="button" id="telegram-save-btn">Save Telegram settings</button>
+        <button class="btn" type="button" id="telegram-test-btn">Send test message</button>
+      </div>
+      <div id="telegram-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+
+      <div class="notify-sub">
+        <h4 class="notify-sub-head">
+          <span>Battery monitoring</span>
+          <label class="switch" for="battery-enabled">
+            <input type="checkbox" id="battery-enabled" />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </h4>
+        <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+          Only for Termux host with <b>termux-api</b> installed. Alerts are sent when battery percentage
+          drops below configured levels.
+        </p>
+
+        <div class="field">
+          <label class="label">Alert levels (%)</label>
+          <input class="input" id="battery-levels" placeholder="30,15,5" />
+          <div style="font-size:.75rem; color:var(--text-dim);">
+            Comma-separated list, highest to lowest. Example: 30,15,5
+          </div>
+        </div>
+
+        <label class="notify-check" for="battery-silent">
+          <input type="checkbox" id="battery-silent" />
+          <span>Silent mode (deliver without sound)</span>
+        </label>
+
+        <button class="btn submit" type="button" id="battery-save-btn" style="margin-top:.75rem;">Save battery settings</button>
+        <div id="battery-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+      </div>
+
+      <div class="notify-sub">
+        <h4 class="notify-sub-head">
+          <span>Camera monitoring</span>
+          <label class="switch" for="camera-alerts-enabled">
+            <input type="checkbox" id="camera-alerts-enabled" />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </h4>
+        <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+          Notifies when a camera is opened or closed through Wadboard. Rules are set per camera here
+          or in the camera's Create/Edit form. When off, the rules are hidden from the camera form but kept.
+        </p>
+
+        <div id="camera-alerts-list" class="sessions-box"></div>
+
+        <button class="btn submit" type="button" id="camera-alerts-save-btn" style="margin-top:.75rem;">Save camera monitoring</button>
+        <div id="camera-alerts-save-status" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+      </div>
     </div>
 
     <details class="form" style="margin-top:1rem;">

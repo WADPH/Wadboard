@@ -1088,3 +1088,60 @@
 
   
 
+
+  /* Telegram notifications: nested monitoring blocks + per-camera rules */
+  .notify-sub {
+    margin-top: 1rem;
+    padding-top: .9rem;
+    border-top: 1px solid var(--border);
+  }
+  .notify-sub-head {
+    margin: 0 0 .5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    font-size: .88rem;
+    color: var(--text-main);
+  }
+  .notify-check {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .78rem;
+    color: var(--text-mid);
+    cursor: pointer;
+    user-select: none;
+  }
+  .notify-check input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--btn-bg);
+    cursor: pointer;
+  }
+  .notify-check input:disabled + span {
+    opacity: .5;
+  }
+  .notify-rules {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+  }
+  .notify-rule {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .35rem 1rem;
+  }
+  .notify-camera {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .notify-camera-name {
+    font-weight: 700;
+    font-size: .82rem;
+    color: var(--text-main);
+    overflow-wrap: anywhere;
+  }

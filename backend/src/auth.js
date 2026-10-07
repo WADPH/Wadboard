@@ -452,6 +452,9 @@ export function createAuthModule({ dbApi }) {
     isPrivateModeEnabled,
     setViewAccessCookie,
     clearViewAccessCookie,
+    getClientIp,
+    parseBrowserFromUA,
+    parseOsFromUA,
     registerRoutes
   };
 }

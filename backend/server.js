@@ -12,6 +12,7 @@ import { createActionsModule } from "./src/actions.js";
 import { createCameraModule } from "./src/camera.js";
 import { createTerminalModule } from "./src/terminal.js";
 import { createIconsModule } from "./src/icons.js";
+import { createNotificationsModule } from "./src/notifications.js";
 import { registerAppRoutes } from "./src/routes.js";
 import * as logger from "./src/logger.js";
 
@@ -26,7 +27,8 @@ dbApi.loadDB();
 const authApi = createAuthModule({ dbApi });
 const actionsApi = createActionsModule({ dbApi });
 const cameraApi = createCameraModule({ dbApi });
-const healthApi = createHealthModule({ dbApi, cameraApi });
+const notificationsApi = createNotificationsModule({ dbApi, authApi });
+const healthApi = createHealthModule({ dbApi, cameraApi, notificationsApi });
 const terminalApi = createTerminalModule({ authApi });
 const iconsApi = createIconsModule();
 
@@ -87,7 +89,8 @@ authApi.registerRoutes(app, { terminalApi });
 healthApi.registerRoutes(app, { authApi });
 terminalApi.registerRoutes(app);
 iconsApi.registerRoutes(app, { authApi });
-registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi });
+notificationsApi.registerRoutes(app);
+registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi, notificationsApi });
 
 healthApi.startMonitoring();
 

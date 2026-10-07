@@ -13,7 +13,7 @@ function isSafeUrl(value) {
 
 const CAMERA_PROVIDERS = new Set(["ip_cam"]);
 
-export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi }) {
+export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, cameraApi, notificationsApi }) {
   const db = dbApi.getDB();
   const saveDB = dbApi.saveDB;
   const makeId = dbApi.makeId;
@@ -21,6 +21,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
   const sanitizeBrandText = dbApi.sanitizeBrandText;
   const getBrandTextConfig = dbApi.getBrandTextConfig;
   const sanitizeForClient = dbApi.sanitizeForClient;
+  const normalizeCameraMonitoring = dbApi.normalizeCameraMonitoring;
 
   const { requireAdmin, requireViewAccess, getSession } = authApi;
   const { healthCheckAll, pollHostInfoOnce } = healthApi;
@@ -545,7 +546,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
   }
 
   app.post("/api/camera", requireAdmin, (req, res) => {
-    const { name, provider, host, port, username, password, notes, icon } = req.body || {};
+    const { name, provider, host, port, username, password, notes, icon, monitoring } = req.body || {};
     const trimmedHost = String(host || "").trim();
     const trimmedPort = String(port || "").trim();
 
@@ -567,6 +568,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
       notes: notes || "",
       icon: icon || "",
       rotation: 0,
+      monitoring: normalizeCameraMonitoring(monitoring),
       lastStatus: "unknown",
       lastChecked: null,
       lastRun: null,
@@ -584,7 +586,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
     const cam = findCamera(id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
 
-    const { name, provider, host, port, username, password, notes, icon } = req.body || {};
+    const { name, provider, host, port, username, password, notes, icon, monitoring } = req.body || {};
 
     if (host !== undefined || port !== undefined) {
       const nextHost = String(host !== undefined ? host : cam.host).trim();
@@ -602,6 +604,9 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
     if (password !== undefined) cam.password = password;
     if (notes    !== undefined) cam.notes    = notes;
     if (icon     !== undefined) cam.icon     = icon;
+    // Omitted when Camera monitoring is globally off (the form hides it), so
+    // the camera keeps its saved rules.
+    if (monitoring !== undefined) cam.monitoring = normalizeCameraMonitoring(monitoring);
 
     saveDB();
     audit("camera.update", `Camera updated: ${cam.name || id}`, getRequestSource(req), { id });
@@ -651,7 +656,7 @@ export function registerAppRoutes(app, { authApi, dbApi, healthApi, actionsApi, 
   app.get("/api/camera/:id/stream", requireAdmin, async (req, res) => {
     const cam = findCamera(req.params.id);
     if (!cam) return res.status(404).json({ error: "Camera not found" });
-    await cameraApi.proxyStream(cam, req, res);
+    await cameraApi.proxyStream(cam, req, res, notificationsApi.trackCameraView(cam, req));
   });
 
   app.get("/api/camera/:id/status", requireAdmin, async (req, res) => {

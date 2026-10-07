@@ -18,7 +18,7 @@ Wadboard is a self-hosted infrastructure dashboard for internal environments. It
     - [SSH Actions](#ssh-actions)
     - [Host Maintenance Commands](#host-maintenance-commands)
     - [Health and Host Metrics](#health-and-host-metrics)
-    - [Battery Monitoring](#battery-monitoring)
+    - [Telegram Notifications](#telegram-notifications)
     - [Admin Session and Private Mode](#admin-session-and-private-mode)
     - [Config Import / Export](#config-import--export)
     - [Logs and Audit Trail](#logs-and-audit-trail)
@@ -102,11 +102,13 @@ Wadboard is a self-hosted infrastructure dashboard for internal environments. It
 - CPU, memory, storage, uptime, network and battery information when available
 - Graceful degradation when some metrics are unavailable
 
-### Battery Monitoring
+### Telegram Notifications
 
-- Optional battery polling
-- Telegram low-battery alerts
-- Multiple thresholds supported, for example `30,15,5`
+- One shared Telegram bot (token + chat ID) configured in Settings, with a global on/off switch and a test message button
+- Turning any switch off stops sending but keeps all monitoring settings
+- **Battery monitoring**: low-battery alerts with multiple thresholds, for example `30,15,5`; optional silent mode
+- **Camera monitoring**: notifications when a camera is opened ("accessed") and closed ("on leave") through Wadboard, with time (host timezone), viewer IP, browser/OS, session and view duration
+- Camera rules are per camera (each event can be enabled and made silent individually) and can be edited both in Settings and in the camera's Create/Edit form; the form hides them while Camera monitoring is globally off
 
 ### Admin Session and Private Mode
 
@@ -181,7 +183,7 @@ Wadboard is a self-hosted infrastructure dashboard for internal environments. It
 - `script` from util-linux for better terminal behavior
 - Termux and `termux-api` for richer Android host integration
 - MikroTik RouterOS REST API for MikroTik WOL mode
-- Telegram bot token and chat ID for battery alerts
+- Telegram bot token and chat ID for battery and camera notifications
 
 ## Installation
 

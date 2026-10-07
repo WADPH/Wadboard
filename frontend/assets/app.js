@@ -70,6 +70,8 @@
   const camUsernameInput = document.getElementById("cam-username");
   const camPasswordInput = document.getElementById("cam-password");
   const camNotesInput    = document.getElementById("cam-notes");
+  const camMonitoringBlock = document.getElementById("cam-monitoring-block");
+  const camMonitoringRules = document.getElementById("cam-monitoring-rules");
 
   const cameraViewOverlay  = document.getElementById("camera-view-overlay");
   const cameraViewTitleEl  = document.getElementById("camera-view-title");
@@ -195,10 +197,19 @@
   const batteryDisabledLabel  = document.getElementById("battery-disabled-label");
   const batteryEnabledLabel   = document.getElementById("battery-enabled-label");
   const batteryLevelsInput    = document.getElementById("battery-levels");
-  const batteryBotTokenInput  = document.getElementById("battery-bot-token");
-  const batteryChatIdInput    = document.getElementById("battery-chat-id");
+  const batterySilentInput    = document.getElementById("battery-silent");
   const batterySaveBtn        = document.getElementById("battery-save-btn");
   const batterySaveStatus     = document.getElementById("battery-save-status");
+  const telegramEnabledInput  = document.getElementById("telegram-enabled");
+  const telegramBotTokenInput = document.getElementById("telegram-bot-token");
+  const telegramChatIdInput   = document.getElementById("telegram-chat-id");
+  const telegramSaveBtn       = document.getElementById("telegram-save-btn");
+  const telegramTestBtn       = document.getElementById("telegram-test-btn");
+  const telegramSaveStatus    = document.getElementById("telegram-save-status");
+  const cameraAlertsEnabledInput = document.getElementById("camera-alerts-enabled");
+  const cameraAlertsListEl       = document.getElementById("camera-alerts-list");
+  const cameraAlertsSaveBtn      = document.getElementById("camera-alerts-save-btn");
+  const cameraAlertsSaveStatus   = document.getElementById("camera-alerts-save-status");
   const configExportBtn       = document.getElementById("config-export-btn");
   const configImportBtn       = document.getElementById("config-import-btn");
   const configImportInput     = document.getElementById("config-import-input");
@@ -1188,10 +1199,122 @@ async function changeAdminPassword(oldPw, newPw) {
     } else {
       batteryLevelsInput.value = "30,15,5";
     }
-    batteryBotTokenInput.value = cfg.telegramBotToken || "";
-    batteryChatIdInput.value = cfg.telegramChatId || "";
+    if (batterySilentInput) batterySilentInput.checked = !!cfg.silent;
     syncSwitchLabelStates();
     batterySaveStatus.textContent = "";
+  }
+
+  async function loadTelegramConfigIntoForm() {
+    if (!telegramEnabledInput) return;
+    const cfg = await apiGET("/telegram");
+    if (!cfg) return;
+    telegramEnabledInput.checked = !!cfg.enabled;
+    telegramBotTokenInput.value = cfg.botToken || "";
+    telegramChatIdInput.value = cfg.chatId || "";
+    telegramSaveStatus.textContent = "";
+  }
+
+  // Per-camera Telegram rules (Accessed / On leave, each optionally silent).
+  // Shared by the camera Create/Edit form and Settings > Camera monitoring;
+  // both read and write the same `camera.monitoring` object on the server.
+  const CAMERA_RULE_EVENTS = [
+    { key: "onAccess", silentKey: "onAccessSilent", label: "Camera accessed" },
+    { key: "onLeave",  silentKey: "onLeaveSilent",  label: "On leave" }
+  ];
+
+  function buildCameraRuleControls(monitoring) {
+    const m = monitoring || {};
+    const wrap = document.createElement("div");
+    wrap.className = "notify-rules";
+    const inputs = {};
+
+    function makeCheck(labelText, checked) {
+      const label = document.createElement("label");
+      label.className = "notify-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!checked;
+      const span = document.createElement("span");
+      span.textContent = labelText;
+      label.appendChild(input);
+      label.appendChild(span);
+      return { label, input };
+    }
+
+    for (const ev of CAMERA_RULE_EVENTS) {
+      const row = document.createElement("div");
+      row.className = "notify-rule";
+      const main = makeCheck(ev.label, m[ev.key]);
+      const silent = makeCheck("Silent", m[ev.silentKey]);
+      const syncSilent = () => { silent.input.disabled = !main.input.checked; };
+      main.input.addEventListener("change", syncSilent);
+      syncSilent();
+      row.appendChild(main.label);
+      row.appendChild(silent.label);
+      wrap.appendChild(row);
+      inputs[ev.key] = main.input;
+      inputs[ev.silentKey] = silent.input;
+    }
+
+    function read() {
+      const out = {};
+      for (const ev of CAMERA_RULE_EVENTS) {
+        out[ev.key] = !!inputs[ev.key].checked;
+        out[ev.silentKey] = !!inputs[ev.silentKey].checked;
+      }
+      return out;
+    }
+
+    return { el: wrap, read };
+  }
+
+  let cameraAlertsRuleControls = []; // [{ id, read }]
+
+  async function loadCameraAlertsIntoForm() {
+    if (!cameraAlertsEnabledInput || !cameraAlertsListEl) return;
+    const data = await apiGET("/camera-alerts");
+    if (!data || !Array.isArray(data.cameras)) return;
+
+    cameraAlertsEnabledInput.checked = !!data.enabled;
+    cameraAlertsListEl.innerHTML = "";
+    cameraAlertsRuleControls = [];
+
+    if (!data.cameras.length) {
+      const empty = document.createElement("div");
+      empty.style.fontSize = ".76rem";
+      empty.style.color = "var(--text-dim)";
+      empty.textContent = "No cameras yet.";
+      cameraAlertsListEl.appendChild(empty);
+    }
+
+    for (const cam of data.cameras) {
+      const item = document.createElement("div");
+      item.className = "session-item notify-camera";
+      const name = document.createElement("div");
+      name.className = "notify-camera-name";
+      name.textContent = cam.name || cam.id;
+      const controls = buildCameraRuleControls(cam.monitoring);
+      item.appendChild(name);
+      item.appendChild(controls.el);
+      cameraAlertsListEl.appendChild(item);
+      cameraAlertsRuleControls.push({ id: cam.id, read: controls.read });
+    }
+
+    syncCameraAlertsListVisibility();
+    cameraAlertsSaveStatus.textContent = "";
+  }
+
+  function syncCameraAlertsListVisibility() {
+    if (!cameraAlertsListEl || !cameraAlertsEnabledInput) return;
+    cameraAlertsListEl.classList.toggle("hidden", !cameraAlertsEnabledInput.checked);
+  }
+
+  async function loadNotificationsIntoForm() {
+    await Promise.all([
+      loadTelegramConfigIntoForm(),
+      loadBatteryConfigIntoForm(),
+      loadCameraAlertsIntoForm()
+    ]);
   }
 
   function formatSessionTime(ts) {
@@ -1313,7 +1436,7 @@ async function changeAdminPassword(oldPw, newPw) {
       if (configImportStatus) configImportStatus.textContent = "";
       loadBrandTextIntoForm();
       loadAccessModeIntoForm();
-      loadBatteryConfigIntoForm();
+      loadNotificationsIntoForm();
       loadViewSessionsIntoForm();
     } else {
       settingsSessionText.textContent = "Enter admin password to enable editing and configure additional features.";
@@ -1404,7 +1527,7 @@ async function changeAdminPassword(oldPw, newPw) {
     render();
     await refreshBrandTextFromServer();
     await loadAccessModeIntoForm();
-    await loadBatteryConfigIntoForm();
+    await loadNotificationsIntoForm();
     await loadViewSessionsIntoForm();
 
     const detail = payload.backupFile ? `Backup: ${payload.backupFile}` : "";
@@ -1477,8 +1600,7 @@ async function changeAdminPassword(oldPw, newPw) {
 
       await loadStateFromServer();
       await loadAccessModeIntoForm();
-      // updateBatteryFormDisabled();
-      await loadBatteryConfigIntoForm();
+      await loadNotificationsIntoForm();
       await loadViewSessionsIntoForm();
     } else {
       const payload = await res.json().catch(() => ({}));
@@ -1616,8 +1738,7 @@ batterySaveBtn.addEventListener("click", async () => {
     const body = {
       enabled,
       levels: levels.length ? levels : undefined,
-      telegramBotToken: batteryBotTokenInput.value.trim(),
-      telegramChatId: batteryChatIdInput.value.trim()
+      silent: !!(batterySilentInput && batterySilentInput.checked)
     };
 
     batterySaveStatus.textContent = "Saving...";
@@ -1628,6 +1749,56 @@ batterySaveBtn.addEventListener("click", async () => {
       batterySaveStatus.textContent = "Error saving settings.";
     }
   });
+
+if (telegramSaveBtn) {
+  telegramSaveBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+    telegramSaveStatus.textContent = "Saving...";
+    const resp = await apiJSON("PUT", "/telegram", {
+      enabled: !!telegramEnabledInput.checked,
+      botToken: telegramBotTokenInput.value.trim(),
+      chatId: telegramChatIdInput.value.trim()
+    });
+    telegramSaveStatus.textContent = resp && resp.ok ? "Saved." : "Error saving settings.";
+  });
+}
+
+if (telegramTestBtn) {
+  telegramTestBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+    telegramSaveStatus.textContent = "Sending test message (uses saved settings)...";
+    const resp = await apiPOSTNoBody("/telegram/test");
+    if (resp && resp.ok) {
+      telegramSaveStatus.textContent = "Test message sent.";
+    } else if (resp && resp.error === "telegram_not_configured") {
+      telegramSaveStatus.textContent = "Save bot token and chat ID first.";
+    } else {
+      telegramSaveStatus.textContent = `Test failed${resp && resp.detail ? ": " + resp.detail : "."}`;
+    }
+  });
+}
+
+if (cameraAlertsEnabledInput) {
+  cameraAlertsEnabledInput.addEventListener("change", syncCameraAlertsListVisibility);
+}
+
+if (cameraAlertsSaveBtn) {
+  cameraAlertsSaveBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+    cameraAlertsSaveStatus.textContent = "Saving...";
+    const resp = await apiJSON("PUT", "/camera-alerts", {
+      enabled: !!cameraAlertsEnabledInput.checked,
+      cameras: cameraAlertsRuleControls.map(c => ({ id: c.id, monitoring: c.read() }))
+    });
+    if (resp && resp.ok) {
+      cameraAlertsSaveStatus.textContent = "Saved.";
+      // Keep state.cameras (used by the camera Edit form) in sync.
+      await loadStateFromServer();
+    } else {
+      cameraAlertsSaveStatus.textContent = "Error saving settings.";
+    }
+  });
+}
 
   // ==============================
   // SERVER SYNC
@@ -1740,6 +1911,27 @@ batterySaveBtn.addEventListener("click", async () => {
     if (hostIconInput) hostIconInput.value = "";
     hostCommandInput.value = "";
     hostNotesInput.value   = "";
+  }
+
+  let camRuleControls = null;
+
+  // The rules block is only shown while Settings > Camera monitoring is on;
+  // otherwise the form leaves `monitoring` out and the saved rules stay as-is.
+  async function setupCameraMonitoringBlock(monitoring) {
+    if (!camMonitoringBlock || !camMonitoringRules) return;
+    camRuleControls = null;
+    camMonitoringRules.innerHTML = "";
+    camMonitoringBlock.classList.add("hidden");
+
+    const openedFor = mode.id;
+    const data = await apiGET("/camera-alerts");
+    if (mode.type !== "camera" || mode.id !== openedFor) return; // form changed meanwhile
+    if (!data || !data.enabled) return;
+
+    const controls = buildCameraRuleControls(monitoring);
+    camMonitoringRules.appendChild(controls.el);
+    camRuleControls = controls;
+    camMonitoringBlock.classList.remove("hidden");
   }
 
   function resetCameraForm() {
@@ -2033,8 +2225,10 @@ batterySaveBtn.addEventListener("click", async () => {
           camPasswordInput.value = cam.password || "";
           camNotesInput.value    = cam.notes || "";
         }
+        setupCameraMonitoringBlock(cam ? cam.monitoring : null);
       } else {
         resetCameraForm();
+        setupCameraMonitoringBlock(null);
       }
     }
 
@@ -2234,6 +2428,7 @@ if (brandSaveBtn) {
       password: camPasswordInput.value,
       notes:    camNotesInput.value.trim()
     };
+    if (camRuleControls) body.monitoring = camRuleControls.read();
     if (!body.name || !body.host || !body.port) return;
 
     if (mode.action === "edit" && mode.id) {
