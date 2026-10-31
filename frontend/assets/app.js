@@ -25,6 +25,9 @@
   let viewAccessGranted = true;
   let appStarted = false;
   let isSyncingAccessSwitch = false;
+  let remoteShellEnabled = false;
+  let remoteShellLocked = false;
+  let isSyncingTerminalSwitch = false;
   const VERSION_FILE_PATH = "/version.json";
 
   // modal mode for Add/Edit forms
@@ -174,6 +177,12 @@
   const settingsLogoutBtn     = document.getElementById("settings-logout-btn");
   const accessPrivateEnabledInput = document.getElementById("access-private-enabled");
   const accessSaveStatus          = document.getElementById("access-save-status");
+  const terminalEnabledInput      = document.getElementById("terminal-enabled");
+  const terminalEnableConfirmBox  = document.getElementById("terminal-enable-confirm");
+  const terminalEnablePassInput   = document.getElementById("terminal-enable-password");
+  const terminalEnableConfirmBtn  = document.getElementById("terminal-enable-confirm-btn");
+  const terminalEnableCancelBtn   = document.getElementById("terminal-enable-cancel-btn");
+  const terminalSaveStatus        = document.getElementById("terminal-save-status");
   const accessPublicLabel         = document.getElementById("access-public-label");
   const accessPrivateLabel        = document.getElementById("access-private-label");
   const viewLogoutBtn             = document.getElementById("view-logout-btn");
@@ -675,6 +684,29 @@
     if (viewLogoutHealthBtn) viewLogoutHealthBtn.classList.toggle("hidden", !show);
   }
 
+  // Terminal buttons are only shown while the remote shell is enabled on the server.
+  function updateTerminalButtonsVisibility() {
+    if (terminalBtn) terminalBtn.classList.toggle("hidden", !remoteShellEnabled);
+    if (terminalHealthBtn) terminalHealthBtn.classList.toggle("hidden", !remoteShellEnabled);
+    if (!remoteShellEnabled) {
+      if (terminalOverlay) terminalOverlay.classList.add("hidden");
+      if (terminalSocket && terminalSocket.readyState === WebSocket.OPEN) {
+        terminalSocket.close(1000, "disabled");
+      }
+    }
+  }
+
+  async function loadRemoteShellStatus() {
+    try {
+      const res = await fetch(API_BASE + "/terminal/status", { credentials: "include" });
+      const data = res.ok ? await res.json().catch(() => ({})) : {};
+      remoteShellEnabled = data.enabled === true;
+    } catch {
+      remoteShellEnabled = false;
+    }
+    updateTerminalButtonsVisibility();
+  }
+
   function syncSwitchLabelStates() {
     const accessPrivateOn = !!(accessPrivateEnabledInput && accessPrivateEnabledInput.checked);
     if (accessPublicLabel) accessPublicLabel.classList.toggle("active", !accessPrivateOn);
@@ -851,6 +883,10 @@
   function openTerminalModal(forceAuth = false) {
     if (terminalOpening) return;
     if (!terminalOverlay) return;
+    if (!remoteShellEnabled) {
+      showToast({ title: "Terminal", message: "Remote shell is disabled in Settings", type: "error" });
+      return;
+    }
 
     if ((terminalNeedsAuth || !editMode) && !forceAuth) {
       ensureAdminThen(() => {
@@ -989,7 +1025,11 @@
     }
     const status = await res.json().catch(() => ({}));
     if (!status || status.ok) return status;
-    if (status.missing === "script" || status.missing === "shell") {
+    if (status.missing === "disabled") {
+      remoteShellEnabled = false;
+      updateTerminalButtonsVisibility();
+    }
+    if (status.missing === "script" || status.missing === "shell" || status.missing === "disabled") {
       terminalStatusEl.textContent = status.hint || "Terminal prerequisites are missing";
     }
     return status;
@@ -1186,6 +1226,68 @@ async function changeAdminPassword(oldPw, newPw) {
     isSyncingAccessSwitch = false;
     syncSwitchLabelStates();
     if (accessSaveStatus) accessSaveStatus.textContent = "";
+  }
+
+ function setTerminalSwitch(checked) {
+    if (!terminalEnabledInput) return;
+    isSyncingTerminalSwitch = true;
+    terminalEnabledInput.checked = !!checked;
+    isSyncingTerminalSwitch = false;
+  }
+
+ function hideTerminalEnableConfirm() {
+    if (terminalEnableConfirmBox) terminalEnableConfirmBox.classList.add("hidden");
+    if (terminalEnablePassInput) terminalEnablePassInput.value = "";
+  }
+
+ async function loadTerminalSettingsIntoForm() {
+    if (!terminalEnabledInput) return;
+    const cfg = await apiGET("/terminal/settings");
+    if (!cfg || typeof cfg.enabled !== "boolean") return;
+    remoteShellEnabled = cfg.enabled;
+    remoteShellLocked = !!cfg.locked;
+    updateTerminalButtonsVisibility();
+    setTerminalSwitch(remoteShellEnabled);
+    terminalEnabledInput.disabled = remoteShellLocked;
+    hideTerminalEnableConfirm();
+    if (terminalSaveStatus) {
+      terminalSaveStatus.textContent = remoteShellLocked
+        ? "Locked off on the server (WADBOARD_DISABLE_REMOTE_SHELL)."
+        : "";
+    }
+  }
+
+ async function saveRemoteShellSetting(enabled, password) {
+    if (terminalSaveStatus) terminalSaveStatus.textContent = "Saving...";
+    const body = enabled ? { enabled: true, password } : { enabled: false };
+    const resp = await apiJSON("PUT", "/terminal/settings", body);
+    if (resp && resp.ok) {
+      remoteShellEnabled = !!resp.enabled;
+      updateTerminalButtonsVisibility();
+      setTerminalSwitch(remoteShellEnabled);
+      hideTerminalEnableConfirm();
+      if (terminalSaveStatus) terminalSaveStatus.textContent = remoteShellEnabled ? "Remote shell enabled" : "Remote shell disabled";
+      return;
+    }
+
+    const err = resp && resp.error;
+    if (enabled && (err === "bad_password" || err === "too_many_attempts")) {
+      // Keep the confirmation row open so the password can be retried.
+      if (terminalSaveStatus) {
+        terminalSaveStatus.textContent = err === "too_many_attempts"
+          ? `Too many attempts. Try again in ${resp.retryAfterSec || 60}s.`
+          : "Wrong admin password.";
+      }
+      if (terminalEnablePassInput) {
+        terminalEnablePassInput.value = "";
+        terminalEnablePassInput.focus();
+      }
+      return;
+    }
+
+    setTerminalSwitch(remoteShellEnabled);
+    hideTerminalEnableConfirm();
+    if (terminalSaveStatus) terminalSaveStatus.textContent = err === "locked" ? "Locked off on the server." : "Save failed";
   }
 
  async function loadBatteryConfigIntoForm() {
@@ -1436,6 +1538,7 @@ async function changeAdminPassword(oldPw, newPw) {
       if (configImportStatus) configImportStatus.textContent = "";
       loadBrandTextIntoForm();
       loadAccessModeIntoForm();
+      loadTerminalSettingsIntoForm();
       loadNotificationsIntoForm();
       loadViewSessionsIntoForm();
     } else {
@@ -1527,6 +1630,7 @@ async function changeAdminPassword(oldPw, newPw) {
     render();
     await refreshBrandTextFromServer();
     await loadAccessModeIntoForm();
+    await loadTerminalSettingsIntoForm();
     await loadNotificationsIntoForm();
     await loadViewSessionsIntoForm();
 
@@ -1600,6 +1704,7 @@ async function changeAdminPassword(oldPw, newPw) {
 
       await loadStateFromServer();
       await loadAccessModeIntoForm();
+      await loadTerminalSettingsIntoForm();
       await loadNotificationsIntoForm();
       await loadViewSessionsIntoForm();
     } else {
@@ -1661,6 +1766,53 @@ if (accessPrivateEnabledInput) {
       syncSwitchLabelStates();
       if (accessSaveStatus) accessSaveStatus.textContent = "Save failed";
     }
+  });
+}
+
+if (terminalEnabledInput) {
+  terminalEnabledInput.addEventListener("change", async () => {
+    if (isSyncingTerminalSwitch) return;
+    if (!editMode || remoteShellLocked) {
+      setTerminalSwitch(remoteShellEnabled);
+      return;
+    }
+
+    if (terminalEnabledInput.checked) {
+      // Enabling needs the admin password again; nothing is saved until confirmed.
+      if (terminalEnableConfirmBox) terminalEnableConfirmBox.classList.remove("hidden");
+      if (terminalSaveStatus) terminalSaveStatus.textContent = "";
+      if (terminalEnablePassInput) terminalEnablePassInput.focus();
+      return;
+    }
+
+    hideTerminalEnableConfirm();
+    await saveRemoteShellSetting(false);
+  });
+}
+
+if (terminalEnableConfirmBtn) {
+  terminalEnableConfirmBtn.addEventListener("click", async () => {
+    if (!editMode) return;
+    const password = terminalEnablePassInput ? terminalEnablePassInput.value : "";
+    if (!password) {
+      if (terminalSaveStatus) terminalSaveStatus.textContent = "Enter the admin password.";
+      return;
+    }
+    await saveRemoteShellSetting(true, password);
+  });
+}
+
+if (terminalEnablePassInput) {
+  terminalEnablePassInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && terminalEnableConfirmBtn) terminalEnableConfirmBtn.click();
+  });
+}
+
+if (terminalEnableCancelBtn) {
+  terminalEnableCancelBtn.addEventListener("click", () => {
+    setTerminalSwitch(remoteShellEnabled);
+    hideTerminalEnableConfirm();
+    if (terminalSaveStatus) terminalSaveStatus.textContent = "";
   });
 }
 
@@ -3469,6 +3621,7 @@ if (brandSaveBtn) {
     appStarted = true;
 
     await refreshBrandTextFromServer();
+    await loadRemoteShellStatus();
 
     if (isHealthRoute) {
       showHealthUI();

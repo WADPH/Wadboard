@@ -222,7 +222,10 @@ function buildEmptyDb() {
       batteryAlerts: defaultBatteryAlertsConfig(),
       cameraAlerts: defaultCameraAlertsConfig(),
       brandText: "",
-      privateMode: false
+      privateMode: false,
+      // The browser terminal is a full shell on the host, so it stays off until
+      // an admin explicitly turns it on in Settings.
+      remoteShellEnabled: false
     },
     admin: {
       passwordHash: null,
@@ -291,6 +294,9 @@ function ensureConfigStructure() {
   }
 if (typeof db.config.privateMode !== "boolean") {
     db.config.privateMode = false;
+  }
+  if (typeof db.config.remoteShellEnabled !== "boolean") {
+    db.config.remoteShellEnabled = false;
   }
 
   if (!db.admin || typeof db.admin !== "object") {

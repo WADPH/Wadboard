@@ -148,6 +148,10 @@ Wadboard is a self-hosted infrastructure dashboard for internal environments. It
 - WebSocket terminal endpoint at `/api/terminal`
 - Admin-protected
 - Uses local shell and `script` when available
+- **Disabled by default.** Turn it on in Settings > Remote shell; enabling asks for the admin password again, disabling closes all open terminal sessions
+- While disabled, the terminal buttons are hidden and the WebSocket upgrade is refused before any shell is started
+- The switch is not taken from imported config files
+- Start Wadboard with `WADBOARD_DISABLE_REMOTE_SHELL=1` to lock the terminal off at the process level; it then cannot be enabled from the web UI at all
 
 ## Security model
 

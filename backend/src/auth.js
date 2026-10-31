@@ -172,6 +172,29 @@ export function createAuthModule({ dbApi }) {
   // stricter limiter than the plain viewer gate.
   const adminLoginLimiter = createAttemptLimiter({ maxAttempts: 5, lockMs: 15 * 60 * 1000 });
 
+  // Re-checks the admin password for sensitive changes made inside an already
+  // authenticated session (e.g. turning the remote shell on), so a stolen
+  // session cookie alone is not enough. Shares the admin login limiter.
+  // Returns null on success, or { status, body } to send back.
+  function confirmAdminPassword(req, password) {
+    const waitMs = adminLoginLimiter.getRemainingMs(req);
+    if (waitMs > 0) {
+      return { status: 429, body: { error: "too_many_attempts", retryAfterSec: Math.ceil(waitMs / 1000) } };
+    }
+    if (!password || !checkPassword(password)) {
+      adminLoginLimiter.registerFailure(req);
+      const nowWaitMs = adminLoginLimiter.getRemainingMs(req);
+      if (nowWaitMs > 0) {
+        return { status: 429, body: { error: "too_many_attempts", retryAfterSec: Math.ceil(nowWaitMs / 1000) } };
+      }
+      // 403 rather than 401: the session itself is still valid, so the UI must
+      // not treat this as being logged out.
+      return { status: 403, body: { error: "bad_password" } };
+    }
+    adminLoginLimiter.clearFailures(req);
+    return null;
+  }
+
   function setViewAccessCookie(req, res, token) {
     res.cookie("viewToken", token, {
       httpOnly: true,
@@ -448,6 +471,7 @@ export function createAuthModule({ dbApi }) {
     cleanupExpiredViewSessions,
     requireAdmin,
     requireViewAccess,
+    confirmAdminPassword,
     hasViewAccess,
     isPrivateModeEnabled,
     setViewAccessCookie,

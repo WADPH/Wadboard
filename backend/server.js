@@ -29,7 +29,7 @@ const actionsApi = createActionsModule({ dbApi });
 const cameraApi = createCameraModule({ dbApi });
 const notificationsApi = createNotificationsModule({ dbApi, authApi });
 const healthApi = createHealthModule({ dbApi, cameraApi, notificationsApi });
-const terminalApi = createTerminalModule({ authApi });
+const terminalApi = createTerminalModule({ authApi, dbApi });
 const iconsApi = createIconsModule();
 
 const app = express();
@@ -108,5 +108,5 @@ const server = app.listen(PORT, () => {
   logger.info("WADPH Dashboard API running", { port: PORT, logFile: logger.LOG_FILE });
 });
 
-const wss = new WebSocketServer({ server, path: "/api/terminal" });
+const wss = new WebSocketServer({ server, path: "/api/terminal", verifyClient: terminalApi.verifyClient });
 terminalApi.attachWebSocket(wss);

@@ -99,7 +99,7 @@
             </svg>
             <span class="sr-only">Health</span>
           </button>
-          <button class="icon-btn" id="terminal-toggle" type="button" aria-label="Terminal" title="Terminal">
+          <button class="icon-btn hidden" id="terminal-toggle" type="button" aria-label="Terminal" title="Terminal">
             <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M2.7 4.8a.5.5 0 0 1 .7 0l3 3a.5.5 0 0 1 0 .7l-3 3a.5.5 0 1 1-.7-.7L5.9 8 2.7 4.8a.5.5 0 0 1 0-.7z"></path>
               <path d="M7.5 11a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5z"></path>
@@ -234,7 +234,7 @@
             </svg>
             <span class="sr-only">Home</span>
           </button>
-          <button class="icon-btn" id="terminal-toggle-health" type="button" aria-label="Terminal" title="Terminal">
+          <button class="icon-btn hidden" id="terminal-toggle-health" type="button" aria-label="Terminal" title="Terminal">
             <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M2.7 4.8a.5.5 0 0 1 .7 0l3 3a.5.5 0 0 1 0 .7l-3 3a.5.5 0 1 1-.7-.7L5.9 8 2.7 4.8a.5.5 0 0 1 0-.7z"></path>
               <path d="M7.5 11a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5z"></path>
@@ -732,6 +732,30 @@
     Off: anyone who opens Wadboard can view dashboard data. On: Wadboard asks for admin password before showing the dashboard.
   </p>
   <div id="access-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
+</div>
+
+<div class="form" style="margin-top:1rem;">
+  <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+    <span>Remote shell</span>
+    <label class="switch" for="terminal-enabled">
+      <input type="checkbox" id="terminal-enabled" />
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </label>
+  </h3>
+  <p style="margin:0 0 .75rem; font-size:.76rem; color:var(--text-dim);">
+    Browser terminal with full shell access to the Wadboard host. Keep it off unless you need it: while it is on, anyone who gets hold of an admin session can run any command on this machine. Turning it on asks for the admin password; turning it off closes all open terminal sessions.
+  </p>
+  <div id="terminal-enable-confirm" class="hidden">
+    <div class="field">
+      <label class="label">Confirm admin password</label>
+      <input class="input" id="terminal-enable-password" type="password" placeholder="********" autocomplete="current-password">
+    </div>
+    <div class="btn-row">
+      <button class="btn submit" type="button" id="terminal-enable-confirm-btn">Enable remote shell</button>
+      <button class="btn" type="button" id="terminal-enable-cancel-btn">Cancel</button>
+    </div>
+  </div>
+  <div id="terminal-save-status" style="margin-top:.5rem;font-size:.75rem;color:var(--text-dim)"></div>
 </div>
 
 

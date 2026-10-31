@@ -1,9 +1,15 @@
 import fs from "fs";
 import { spawn } from "child_process";
-import { error as logError, info as logInfo } from "./logger.js";
+import { audit, error as logError, getRequestSource, info as logInfo } from "./logger.js";
 import { isAndroidLike } from "./platform.js";
 
-export function createTerminalModule({ authApi }) {
+// WADBOARD_DISABLE_REMOTE_SHELL=1 turns the browser terminal off at the process
+// level: it overrides the Settings switch and cannot be flipped from the web UI,
+// so even a fully compromised admin account cannot get a shell through Wadboard.
+const REMOTE_SHELL_LOCKED = /^(1|true|yes|on)$/i.test(String(process.env.WADBOARD_DISABLE_REMOTE_SHELL || "").trim());
+
+export function createTerminalModule({ authApi, dbApi }) {
+  const db = dbApi.getDB();
   const TERMUX_SHELL_BIN = "/data/data/com.termux/files/usr/bin/bash";
 
   const TERMINAL_IDLE_MS = 15 * 60 * 1000;
@@ -49,7 +55,22 @@ export function createTerminalModule({ authApi }) {
     return null;
   }
 
+  function isRemoteShellEnabled() {
+    if (REMOTE_SHELL_LOCKED) return false;
+    dbApi.ensureConfigStructure();
+    return db.config.remoteShellEnabled === true;
+  }
+
   function getTerminalCapability() {
+    if (!isRemoteShellEnabled()) {
+      return {
+        ok: false,
+        missing: "disabled",
+        hint: REMOTE_SHELL_LOCKED
+          ? "Remote shell is disabled on the server (WADBOARD_DISABLE_REMOTE_SHELL)"
+          : "Remote shell is disabled. Enable it in Settings."
+      };
+    }
     const shellPath = resolveShellPath();
     if (!shellPath) {
       return {
@@ -208,18 +229,58 @@ export function createTerminalModule({ authApi }) {
     if (session) stopTerminalSession(session, reason);
   }
 
+  function stopAllTerminalSessions(reason) {
+    for (const session of [...terminalSessions.values()]) {
+      stopTerminalSession(session, reason);
+    }
+  }
+
   function registerRoutes(app) {
-    const { requireViewAccess, getSession } = authApi;
+    const { requireAdmin, requireViewAccess, getSession, confirmAdminPassword } = authApi;
 
     app.get("/api/terminal/status", requireViewAccess, (req, res) => {
       const cap = getTerminalCapability();
       const authorized = !!getSession(req);
       res.json({
         ...cap,
+        enabled: isRemoteShellEnabled(),
         authRequired: !authorized
       });
     });
 
+    app.get("/api/terminal/settings", requireAdmin, (req, res) => {
+      res.json({ enabled: isRemoteShellEnabled(), locked: REMOTE_SHELL_LOCKED });
+    });
+
+    app.put("/api/terminal/settings", requireAdmin, (req, res) => {
+      const enabled = !!(req.body && req.body.enabled === true);
+
+      if (enabled) {
+        if (REMOTE_SHELL_LOCKED) {
+          return res.status(403).json({ error: "locked" });
+        }
+        const failure = confirmAdminPassword(req, req.body && req.body.password);
+        if (failure) {
+          audit("terminal.settings", "Remote shell enable rejected: admin password not confirmed", getRequestSource(req));
+          return res.status(failure.status).json(failure.body);
+        }
+      }
+
+      dbApi.ensureConfigStructure();
+      db.config.remoteShellEnabled = enabled;
+      dbApi.saveDB();
+      if (!enabled) stopAllTerminalSessions("disabled");
+
+      audit("terminal.settings", `Remote shell ${enabled ? "enabled" : "disabled"}`, getRequestSource(req), { enabled });
+      res.json({ ok: true, enabled: isRemoteShellEnabled(), locked: REMOTE_SHELL_LOCKED });
+    });
+  }
+
+  // Refuses the WebSocket upgrade outright (HTTP 403) while the remote shell is
+  // disabled, so no connection is accepted and no shell process is ever spawned.
+  function verifyClient(info, done) {
+    if (isRemoteShellEnabled()) return done(true);
+    return done(false, 403, "Remote shell disabled");
   }
 
   function attachWebSocket(wss) {
@@ -316,6 +377,7 @@ export function createTerminalModule({ authApi }) {
   return {
     registerRoutes,
     attachWebSocket,
+    verifyClient,
     stopTerminalSessionByToken
   };
 }

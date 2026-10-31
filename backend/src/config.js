@@ -57,7 +57,11 @@ function importConfigObject(nextConfig, { req } = {}) {
     };
   }
 
+  // The remote shell switch is never taken from an imported file: a crafted
+  // config must not be able to turn on a shell. The current value is kept.
+  const remoteShellEnabled = getDB().config?.remoteShellEnabled === true;
   const normalized = ensureNormalizedDb(nextConfig);
+  normalized.config.remoteShellEnabled = remoteShellEnabled;
   const previous = JSON.parse(JSON.stringify(getDB()));
   let backupPath = null;
 
